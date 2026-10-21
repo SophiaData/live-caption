@@ -36,10 +36,15 @@ class SystemAudioCapture:
         self._stream: sd.InputStream | None = None
         self._buffer = AudioBuffer(max_blocks=MAX_SECONDS * (SAMPLE_RATE // BLOCKSIZE))
         self._on_level: Callable[[float], None] | None = None
+        self._on_block: Callable[[np.ndarray], None] | None = None
 
     def set_level_callback(self, cb: Callable[[float], None]) -> None:
         """注册音量回调（0~1），UI 音量条用。"""
         self._on_level = cb
+
+    def set_block_callback(self, cb: Callable[[np.ndarray], None]) -> None:
+        """注册音频块回调（每 10ms 一块），识别管道用。"""
+        self._on_block = cb
 
     @property
     def blocks_received(self) -> int:
@@ -82,6 +87,8 @@ class SystemAudioCapture:
                         else np.abs(block).max()
                     )
                 )
+            if self._on_block is not None:
+                self._on_block(block.reshape(-1).astype(np.float32))
 
         try:
             self._stream = sd.InputStream(

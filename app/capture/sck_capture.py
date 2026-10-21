@@ -36,11 +36,16 @@ class SCKSystemAudioCapture:
         self._session: object | None = None
         self._buffer = AudioBuffer(max_blocks=60 * 100)  # 60 秒 @100 块/秒
         self._on_level: Callable[[float], None] | None = None
+        self._block_cb: Callable[[np.ndarray], None] | None = None
         self._blocks_received = 0
         self._is_mac = platform.system() == "Darwin"
 
     def set_level_callback(self, cb: Callable[[float], None]) -> None:
         self._on_level = cb
+
+    def set_block_callback(self, cb: Callable[[np.ndarray], None]) -> None:
+        """注册音频块回调（识别管道用）。"""
+        self._block_cb = cb
 
     @property
     def blocks_received(self) -> int:
@@ -72,6 +77,8 @@ class SCKSystemAudioCapture:
         self._blocks_received += 1
         if self._on_level is not None:
             self._on_level(level)
+        if self._block_cb is not None:
+            self._block_cb(block.reshape(-1).astype(np.float32))
 
     def stop(self) -> None:
         if self._session is not None:
