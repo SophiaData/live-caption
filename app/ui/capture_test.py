@@ -8,7 +8,7 @@ Mac 首选项「系统声音（免驱动）」走 ScreenCaptureKit；其余走 s
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Any, Protocol
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -26,11 +26,12 @@ from ..capture.capture import CaptureError, SystemAudioCapture
 from ..capture.devices import BLOCK_MS
 from ..capture.sck import SCKCaptureError
 from ..capture.sck_capture import SCKSystemAudioCapture
-from ..config.store import load_config
+from ..config.store import load_config, load_pref, save_pref
 from ..pipeline.asr_pipeline import RecognitionPipeline
 from ..pipeline.recognizer import CloudRecognizer, Recognizer
 from ..pipeline.translator import Translator
 from ..providers.openai_compatible import ModelConfig
+from .subtitle_settings import SubtitleSettingsDialog
 from .subtitle_window import SubtitleWindow
 
 SCK_ENTRY = "系统声音（免驱动 · macOS 13+）"
@@ -70,6 +71,7 @@ class CaptureTestWindow(QMainWindow):
         self._update_stats_source: _CaptureLike | None = None
         self._pipeline: RecognitionPipeline | None = None
         self._subtitle: SubtitleWindow | None = None
+        self._tray: Any = None
         self._last_blocks = 0
         self._max_level_recent = 0.0
 
@@ -89,8 +91,13 @@ class CaptureTestWindow(QMainWindow):
         self._subtitle_check.setChecked(True)
         layout.addWidget(self._subtitle_check)
 
+        btn_row = QHBoxLayout()
         self._toggle_btn = QPushButton("开始捕获")
-        layout.addWidget(self._toggle_btn)
+        btn_row.addWidget(self._toggle_btn)
+        self._settings_btn = QPushButton("字幕设置…")
+        self._settings_btn.clicked.connect(self.open_settings)
+        btn_row.addWidget(self._settings_btn)
+        layout.addLayout(btn_row)
 
         self._level_label = QLabel("音量: ▁▁▁▁▁▁▁▁▁▁")
         self._level_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -116,6 +123,7 @@ class CaptureTestWindow(QMainWindow):
 
         self._toggle_btn.clicked.connect(self._toggle)
         self._refresh_devices()
+        self._init_tray()
 
     def _refresh_devices(self) -> None:
         import sounddevice as sd
@@ -166,9 +174,8 @@ class CaptureTestWindow(QMainWindow):
             pipeline = RecognitionPipeline(recognizer, self._build_translator())
             self._pipeline = pipeline
             self._asr_label.setText("识别状态: 准备中（首次启动需加载）")
-            if self._subtitle is None:
-                self._subtitle = SubtitleWindow()
-            self._subtitle.show()
+            sub = self._ensure_subtitle()
+            sub.show()
             # 识别结果 → 字幕窗（字幕窗内部用 Signal 保证跨线程安全）
             pipeline.set_on_text(self._on_asr_text)
             pipeline.start()
@@ -195,6 +202,8 @@ class CaptureTestWindow(QMainWindow):
             self._toggle_btn.setText("停止")
             if pipeline is not None:
                 self._asr_label.setText("识别状态: 运行中")
+            if getattr(self, "_tray", None) is not None:
+                self._tray.set_running(True)
         except (CaptureError, SCKCaptureError) as e:
             self._active_tag = None
             self._update_stats_source = None
@@ -202,6 +211,8 @@ class CaptureTestWindow(QMainWindow):
             if self._pipeline is not None:
                 self._pipeline.stop()
                 self._pipeline = None
+            if getattr(self, "_tray", None) is not None:
+                self._tray.set_running(False, str(e))
 
     def _stop_all(self) -> None:
         if self._pipeline is not None:
@@ -219,11 +230,74 @@ class CaptureTestWindow(QMainWindow):
         self._error_label.setText("")
         self._asr_label.setText("识别状态: 未启动")
         self.setWindowTitle("live-caption")
+        if getattr(self, "_tray", None) is not None:
+            self._tray.set_running(False)
 
     def _on_asr_text(self, original: str, translation: str, _utt: object) -> None:
         """识别线程回调 (原文, 译文) → 转给字幕窗（字幕窗用 Signal 跨线程安全）。"""
         if self._subtitle is not None:
             self._subtitle.show_text(original, translation)
+
+    # ---------- #7 字幕设置 / 位置持久化 / #8 托盘 ----------
+
+    def _ensure_subtitle(self) -> SubtitleWindow:
+        """惰性创建字幕窗，并恢复保存的位置/样式。"""
+        if self._subtitle is None:
+            self._subtitle = SubtitleWindow()
+            pos = load_pref("subtitle_pos")
+            if pos:
+                try:
+                    x_str, y_str = pos.split(",")
+                    self._subtitle.restore_position(int(x_str), int(y_str))
+                except (ValueError, AttributeError):
+                    pass
+            fs = load_pref("subtitle_font")
+            op = load_pref("subtitle_opacity")
+            self._subtitle.apply_style(
+                font_size=int(fs) if fs else None,
+                opacity=float(op) if op else None,
+            )
+            # 拖动结束 → 保存位置
+            self._subtitle.position_changed.connect(self._save_subtitle_pos)
+        return self._subtitle
+
+    def _save_subtitle_pos(self, x: int, y: int) -> None:
+        save_pref("subtitle_pos", f"{x},{y}")
+
+    def open_settings(self) -> None:
+        self._ensure_subtitle()
+        assert self._subtitle is not None
+        dlg = SubtitleSettingsDialog(self._subtitle, self)
+        dlg.exec()
+        # 保存样式
+        save_pref("subtitle_font", str(self._subtitle.font_size))
+        save_pref("subtitle_opacity", str(self._subtitle.opacity))
+
+    def _init_tray(self) -> None:
+        from .tray import TrayController
+
+        self._tray = TrayController(
+            on_toggle=self._toggle,
+            on_settings=self.open_settings,
+            model_info=self._model_info_text,
+        )
+        if not self._tray_available():
+            self._tray = None
+        else:
+            self._tray.refresh_model_info()
+
+    def _tray_available(self) -> bool:
+        from PySide6.QtWidgets import QSystemTrayIcon
+
+        return QSystemTrayIcon.isSystemTrayAvailable()
+
+    def _model_info_text(self) -> str:
+        asr = load_config("asr")
+        trans = load_config("translate")
+        parts = []
+        parts.append(f"识别 {asr.model}" if asr else "识别未配")
+        parts.append(f"翻译 {trans.model}" if trans else "翻译未配")
+        return " / ".join(parts)
 
     # ---------- 音量与统计 ----------
 

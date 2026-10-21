@@ -37,6 +37,27 @@ def _init_db() -> None:
                 model TEXT NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS prefs (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+
+
+def save_pref(key: str, value: str) -> None:
+    """存一条 UI 偏好（如字幕窗位置、字号、透明度）。"""
+    _init_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("INSERT OR REPLACE INTO prefs (key, value) VALUES (?, ?)", (key, value))
+
+
+def load_pref(key: str, default: str | None = None) -> str | None:
+    """读一条 UI 偏好。"""
+    _init_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute("SELECT value FROM prefs WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else default
 
 
 def save_config(slot: str, base_url: str, model: str, api_key: str) -> None:
