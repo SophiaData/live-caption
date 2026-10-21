@@ -28,7 +28,7 @@ class SegmenterConfig:
 
     energy_threshold: float = 0.015  # 能量门限（调高：避免背景音乐的持续低音量被当说话）
     min_silence_ms: int = 300  # 连续静音多久判为一句结束（调低：轻微停顿也能断）
-    max_utterance_s: float = 5.0  # 一句话最长多久（字幕不宜超过 5 秒）
+    max_utterance_s: float = 3.0  # 一句话最长多久（字幕不宜超过 5 秒）
     min_utterance_s: float = 0.3  # 一句话最短多久（防咳嗽误触）
 
 

@@ -107,7 +107,7 @@ class TestTranslatorConfig:
 
 class TestBilingualPipeline:
     def test_original_and_translation_both_delivered(self) -> None:
-        """识别+翻译都成功 → 回调同时拿到原文和译文。"""
+        """识别完先出原文(译文空)，翻译完再更新双语 —— 共两次回调，最后一次带译文。"""
         pipe = RecognitionPipeline(FakeRecognizer("hello"), FakeTranslator("你好"))
         got: list[tuple[str, str]] = []
         pipe.set_on_text(lambda orig, trans, u: got.append((orig, trans)))
@@ -116,10 +116,12 @@ class TestBilingualPipeline:
             pipe.feed_block(b)
         import time
 
-        time.sleep(0.3)
+        time.sleep(0.4)
         pipe.stop()
-        assert len(got) == 1
-        assert got[0] == ("hello", "你好")
+        # 先 (原文,"") 后 (原文,译文)
+        assert got[0] == ("hello", "")
+        assert got[-1] == ("hello", "你好")
+        assert ("hello", "你好") in got
 
     def test_translation_failure_still_shows_original(self) -> None:
         """翻译失败时原文照常显示（译文为空字符串）。"""
@@ -133,9 +135,9 @@ class TestBilingualPipeline:
 
         time.sleep(0.3)
         pipe.stop()
-        assert len(got) == 1
-        assert got[0][0] == "hello"  # 原文还在
-        assert got[0][1] == ""  # 译文为空（显示层只显原文）
+        # 先出原文 (hello,"")，翻译失败后不再更新 → 最后一条仍是 (hello,"")
+        assert got[0][0] == "hello"
+        assert got[-1][1] == ""  # 译文为空（显示层只显原文）
 
     def test_no_translator_works(self) -> None:
         """没配翻译器（None）时只出原文，不崩。"""

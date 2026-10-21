@@ -105,15 +105,20 @@ class RecognitionPipeline:
                 continue
             if not result:
                 continue  # 没识别出内容（静音/噪声），跳过
-            translation = ""
-            if self._translator is not None:
-                tok, translated = self._translator.translate(result)
-                if tok:
-                    translation = translated
-                else:
-                    logger.warning("翻译失败（保留原文显示）: %s", translated)
+            # 优化：识别完先立刻出「原文字幕」，翻译完再更新为双语——
+            # 让用户先看到英文（感知延迟=识别延迟），中文晚 1~2 秒补上。
             if self._on_text is not None:
                 try:
-                    self._on_text(result, translation, utt)
-                except Exception:  # noqa: BLE001 - 回调异常不影响管道
+                    self._on_text(result, "", utt)
+                except Exception:  # noqa: BLE001
                     logger.exception("字幕回调异常")
+            if self._translator is not None:
+                tok, translated = self._translator.translate(result)
+                if tok and translated:
+                    if self._on_text is not None:
+                        try:
+                            self._on_text(result, translated, utt)
+                        except Exception:  # noqa: BLE001
+                            logger.exception("字幕回调异常")
+                else:
+                    logger.warning("翻译失败（保留原文显示）: %s", translated)
