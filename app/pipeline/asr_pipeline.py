@@ -17,6 +17,7 @@ import numpy as np
 
 from .recognizer import Recognizer
 from .segmenter import Segmenter, Utterance
+from .translator import Translator
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,11 @@ class RecognitionPipeline:
         pipe.stop()
     """
 
-    def __init__(self, recognizer: Recognizer) -> None:
+    def __init__(self, recognizer: Recognizer, translator: Translator | None = None) -> None:
         self._recognizer = recognizer
+        self._translator = translator
         self._segmenter = Segmenter()
-        self._on_text: Callable[[str, Utterance], None] | None = None
+        self._on_text: Callable[[str, str, Utterance], None] | None = None
         self._queue: list[Utterance] = []
         self._lock = threading.Lock()
         self._worker: threading.Thread | None = None
@@ -43,8 +45,8 @@ class RecognitionPipeline:
         self._max_queue = 20  # 背压：最多积压 20 句
         self._dropped = 0
 
-    def set_on_text(self, cb: Callable[[str, Utterance], None]) -> None:
-        """注册字幕回调（在识别线程里调用，UI 侧要用信号转发）。"""
+    def set_on_text(self, cb: Callable[[str, str, Utterance], None]) -> None:
+        """注册字幕回调 (原文, 译文, utt)；在后台线程调用，UI 侧用信号转发。"""
         self._on_text = cb
 
     @property
@@ -103,8 +105,15 @@ class RecognitionPipeline:
                 continue
             if not result:
                 continue  # 没识别出内容（静音/噪声），跳过
+            translation = ""
+            if self._translator is not None:
+                tok, translated = self._translator.translate(result)
+                if tok:
+                    translation = translated
+                else:
+                    logger.warning("翻译失败（保留原文显示）: %s", translated)
             if self._on_text is not None:
                 try:
-                    self._on_text(result, utt)
+                    self._on_text(result, translation, utt)
                 except Exception:  # noqa: BLE001 - 回调异常不影响管道
                     logger.exception("字幕回调异常")

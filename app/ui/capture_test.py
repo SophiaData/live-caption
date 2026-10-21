@@ -29,6 +29,7 @@ from ..capture.sck_capture import SCKSystemAudioCapture
 from ..config.store import load_config
 from ..pipeline.asr_pipeline import RecognitionPipeline
 from ..pipeline.recognizer import CloudRecognizer, Recognizer
+from ..pipeline.translator import Translator
 from ..providers.openai_compatible import ModelConfig
 from .subtitle_window import SubtitleWindow
 
@@ -139,6 +140,13 @@ class CaptureTestWindow(QMainWindow):
             ModelConfig(base_url=cfg.base_url, api_key=cfg.api_key, model=cfg.model)
         ), ""
 
+    def _build_translator(self) -> Translator | None:
+        """按配置构造翻译器；没配翻译服务则返回 None（只显示原文，不报错）。"""
+        cfg = load_config("translate")
+        if cfg is None:
+            return None
+        return Translator(ModelConfig(base_url=cfg.base_url, api_key=cfg.api_key, model=cfg.model))
+
     # ---------- 启停 ----------
 
     def _toggle(self) -> None:
@@ -155,7 +163,7 @@ class CaptureTestWindow(QMainWindow):
             if recognizer is None:
                 self._error_label.setText(err)  # 友好提示，不启动
                 return
-            pipeline = RecognitionPipeline(recognizer)
+            pipeline = RecognitionPipeline(recognizer, self._build_translator())
             self._pipeline = pipeline
             self._asr_label.setText("识别状态: 准备中（首次启动需加载）")
             if self._subtitle is None:
@@ -212,10 +220,10 @@ class CaptureTestWindow(QMainWindow):
         self._asr_label.setText("识别状态: 未启动")
         self.setWindowTitle("live-caption")
 
-    def _on_asr_text(self, text: str, _utt: object) -> None:
-        """识别线程回调 → 转给字幕窗（字幕窗用 Signal 跨线程安全）。"""
+    def _on_asr_text(self, original: str, translation: str, _utt: object) -> None:
+        """识别线程回调 (原文, 译文) → 转给字幕窗（字幕窗用 Signal 跨线程安全）。"""
         if self._subtitle is not None:
-            self._subtitle.show_text(text)
+            self._subtitle.show_text(original, translation)
 
     # ---------- 音量与统计 ----------
 

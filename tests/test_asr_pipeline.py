@@ -69,7 +69,7 @@ class TestPipeline:
         rec = FakeRecognizer("hello world")
         pipe = RecognitionPipeline(rec)
         texts: list[str] = []
-        pipe.set_on_text(lambda t, u: texts.append(t))
+        pipe.set_on_text(lambda t, tr, u: texts.append(t))
         pipe.start()
 
         for b in make_speech_blocks(50) + make_silence(50):
@@ -87,7 +87,7 @@ class TestPipeline:
         rec = FakeRecognizer()
         pipe = RecognitionPipeline(rec)
         texts: list[str] = []
-        pipe.set_on_text(lambda t, u: texts.append(t))
+        pipe.set_on_text(lambda t, tr, u: texts.append(t))
         pipe.start()
         for b in make_silence(200):
             pipe.feed_block(b)
@@ -100,7 +100,7 @@ class TestPipeline:
         rec = FakeRecognizer(fail=True)
         pipe = RecognitionPipeline(rec)
         texts: list[str] = []
-        pipe.set_on_text(lambda t, u: texts.append(t))
+        pipe.set_on_text(lambda t, tr, u: texts.append(t))
         pipe.start()
         for b in make_speech_blocks(50) + make_silence(50):
             pipe.feed_block(b)
@@ -112,7 +112,7 @@ class TestPipeline:
         rec = FakeRecognizer("tail")
         pipe = RecognitionPipeline(rec)
         texts: list[str] = []
-        pipe.set_on_text(lambda t, u: texts.append(t))
+        pipe.set_on_text(lambda t, tr, u: texts.append(t))
         pipe.start()
         for b in make_speech_blocks(40):  # 说话但没静音
             pipe.feed_block(b)
