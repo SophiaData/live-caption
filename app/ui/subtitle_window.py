@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
@@ -38,6 +38,8 @@ class SubtitleWindow(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # macOS：让窗口浮在所有 app 之上（含全屏应用、菜单栏层）
+        self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
         self.resize(960, 170)
         self.setWindowTitle("live-caption 字幕")
         self.setToolTip("拖动可移动位置；右键可关闭")
@@ -64,6 +66,32 @@ class SubtitleWindow(QWidget):
         self.text_arrived.connect(self._apply_text)
         self._refresh_styles()
         self._position_at_bottom()
+
+        # macOS：周期性把窗口抬到最高层级，防止被其他置顶 app 遮挡
+        self._raise_timer = QTimer(self)
+        self._raise_timer.setInterval(1500)
+        self._raise_timer.timeout.connect(self._keep_on_top)
+        self._raise_timer.start()
+
+    def _keep_on_top(self) -> None:
+        """macOS：把窗口层级提到浮动层，并允许出现在全屏应用之上。"""
+        try:
+            import objc
+            from AppKit import NSFloatingWindowLevel
+            from Foundation import NSObject
+
+            ns_view = objc.objc_object(c_void_p=self.winId().__int__())
+            ns_window = ns_view.window()  # winId 是 content view，要取其 window
+            if ns_window is None:
+                return
+            # 浮在所有普通窗口之上（含全屏）
+            ns_window.setLevel_(NSFloatingWindowLevel + 1)
+            # collectionBehavior: 可出现在所有 Space、全屏辅助、参与全屏
+            # 1(CanJoinAllSpaces) | 128(FullScreenAuxiliary) | 256(FullScreenPrimary)
+            ns_window.setCollectionBehavior_(1 | 128)
+            _ = NSObject  # 保留 import 供 PyObjC 环境
+        except Exception:  # noqa: BLE001 - 非 Mac 或无 PyObjC 时静默跳过
+            pass
 
     # ---------- 样式 ----------
 
