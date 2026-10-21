@@ -26,9 +26,9 @@ SAMPLE_RATE = 16000
 class SegmenterConfig:
     """断句参数（可调的独立阈值）。"""
 
-    energy_threshold: float = 0.01  # 能量门限（float32 峰值）：低于此为静音
-    min_silence_ms: int = 400  # 连续静音多久判为一句结束
-    max_utterance_s: float = 8.0  # 一句话最长多久（防止拖太长）
+    energy_threshold: float = 0.015  # 能量门限（调高：避免背景音乐的持续低音量被当说话）
+    min_silence_ms: int = 300  # 连续静音多久判为一句结束（调低：轻微停顿也能断）
+    max_utterance_s: float = 5.0  # 一句话最长多久（字幕不宜超过 5 秒）
     min_utterance_s: float = 0.3  # 一句话最短多久（防咳嗽误触）
 
 
@@ -59,38 +59,39 @@ class Segmenter:
     def __init__(self, config: SegmenterConfig | None = None) -> None:
         self._cfg = config or SegmenterConfig()
         self._blocks: list[np.ndarray] = []  # 当前句的块
-        self._current_start_block: int = 0  # 当前句起始的全局块序号
-        self._total_blocks_seen = 0  # 总共喂入的块数
-        self._silence_blocks = 0  # 句内连续静音块数
+        self._cur_samples: int = 0  # 当前句累计样本数
+        self._total_samples_seen = 0  # 全局累计样本数（算时间用）
+        self._silence_samples: int = 0  # 句内连续静音样本数
         self._in_speech = False  # 当前是否在说话
         self._completed: list[Utterance] = []  # 已断完等待取走的句
 
     def feed(self, block: np.ndarray) -> None:
-        """喂入一个 10ms 块（160 样本 float32 单声道）。断句实时发生。"""
+        """喂入一块 float32 单声道音频（大小任意，按样本数算时长）。"""
+        n = len(block)
         energy = float(np.abs(block).max())
         is_speech = energy > self._cfg.energy_threshold
 
         if not self._in_speech:
             if is_speech:
-                # 说话开始
                 self._in_speech = True
-                self._current_start_block = self._total_blocks_seen
-                self._silence_blocks = 0
+                self._cur_samples = n
+                self._silence_samples = 0
                 self._blocks = [block]
-            # 非说话时静默丢弃（防止噪声污染）
+            # 非说话时静默丢弃
         else:
             self._blocks.append(block)
+            self._cur_samples += n
             if is_speech:
-                self._silence_blocks = 0
+                self._silence_samples = 0
             else:
-                self._silence_blocks += 1
-            # 断句条件：静音够了 或 句太长了
-            silence_ms = self._silence_blocks * 10
-            max_blocks = int(self._cfg.max_utterance_s * 1000 / 10)
-            if silence_ms >= self._cfg.min_silence_ms or len(self._blocks) >= max_blocks:
+                self._silence_samples += n
+            # 断句：静音够了 或 句太长了（都按样本数换算）
+            silence_s = self._silence_samples / SAMPLE_RATE
+            cur_s = self._cur_samples / SAMPLE_RATE
+            if silence_s >= self._cfg.min_silence_ms / 1000 or cur_s >= self._cfg.max_utterance_s:
                 self._finalize_utterance()
 
-        self._total_blocks_seen += 1
+        self._total_samples_seen += n
 
     def pop_utterances(self) -> list[Utterance]:
         """取出当前已断的整句（返回后清空完成队列）。"""
@@ -101,12 +102,15 @@ class Segmenter:
     def _finalize_utterance(self) -> None:
         """把当前缓冲的块拼成一句话并存入完成队列；太短则丢弃。"""
         samples = np.concatenate(self._blocks).reshape(-1)
-        start_s = self._current_start_block * 0.01  # 每块 10ms
-        end_s = (self._current_start_block + len(self._blocks)) * 0.01
-        duration = end_s - start_s
+        duration = len(samples) / SAMPLE_RATE
+        # 结束时间：本块已加入 _cur_samples，但 _total_samples_seen 尚未累加本块，
+        # 所以 end = (total_seen + 本块样本) / SAMPLE_RATE
+        end_s = (self._total_samples_seen + len(self._blocks[-1])) / SAMPLE_RATE
+        start_s = end_s - duration
         self._blocks = []
+        self._cur_samples = 0
         self._in_speech = False
-        self._silence_blocks = 0
+        self._silence_samples = 0
         if duration >= self._cfg.min_utterance_s:
             self._completed.append(Utterance(samples=samples, start_s=start_s, end_s=end_s))
         # 太短（咳嗽等）静默丢弃

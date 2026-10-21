@@ -27,16 +27,16 @@ def make_silence_blocks(n_blocks: int) -> list[np.ndarray]:
 
 class TestSegmenter:
     def test_speech_then_silence_produces_one_utterance(self) -> None:
-        """说话 1 秒 → 静音 0.5 秒 → 应切出一句话（断句点在静音满 400ms 处）。"""
+        """说话 1 秒 → 静音 0.5 秒 → 应切出一句话（断句点在静音满 min_silence_ms=300ms 处）。"""
         seg = Segmenter()
         blocks = make_speech_blocks(100) + make_silence_blocks(50)  # 1s 说话 + 0.5s 静音
         for b in blocks:
             seg.feed(b)
         utts = seg.pop_utterances()
         assert len(utts) == 1
-        # 1s 说话 + 0.4s 静音尾巴（400ms 触发断句，剩下的 100ms 静音被吞进下一句开头）
-        assert utts[0].duration_s == pytest.approx(1.4, abs=0.02)
-        assert len(utts[0].samples) == 140 * BLOCK_SAMPLES
+        # 1s 说话 + 0.3s 静音尾巴（300ms 触发断句）
+        assert utts[0].duration_s == pytest.approx(1.3, abs=0.02)
+        assert len(utts[0].samples) == 130 * BLOCK_SAMPLES
 
     def test_two_sentences_separated(self) -> None:
         """说话 → 静音 → 说话 → 静音 → 应切出两句。"""
