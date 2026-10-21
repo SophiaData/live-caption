@@ -32,6 +32,7 @@
 | sounddevice | 系统音频捕获 | PortAudio 封装，跨平台读输入设备 | #2 |
 | httpx | 调识别/翻译 API | 流式响应 + 同步 + 取消全覆盖 | #3 |
 | numpy | 音频块数值处理（sounddevice 回调伴生） | sounddevice 依赖，音频缓冲必要 | #2 |
+| pyobjc-framework-ScreenCaptureKit / AVFoundation / Foundation | Mac 免驱动系统声音捕获（ScreenCaptureKit） | 苹果官方 Python 桥，实现 macOS 13+ 零安装捕获的唯一路径；仅 Mac 生效 | #2b |
 
 ## 决策记录（ADR-lite：只记「为什么」，防止日后翻案无据）
 

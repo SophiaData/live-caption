@@ -33,9 +33,9 @@ def test_level_relay_updates_volume_bar(qtbot: object) -> None:
 def test_level_relay_is_thread_safe_by_signal(qtbot: object) -> None:
     """音频线程接口存在且指向信号中继，而不是直改 UI。"""
     win = _window(qtbot)
-    # start() 前注册的回调就是 relay 的信号发射器
-    win._capture.set_level_callback(win._relay.emit_level)
-    assert win._capture._on_level is not None
+    # start() 前注册的回调就是 relay 的信号发射器（两个捕获器接口一致，用 device 即可）
+    win._device_capture.set_level_callback(win._relay.emit_level)
+    assert win._device_capture._on_level is not None
     # 峰值保持：多个音量到达时取最大
     win._relay.emit_level(0.2)
     from PySide6.QtCore import QCoreApplication

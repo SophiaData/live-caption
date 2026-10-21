@@ -2,9 +2,13 @@
 
 验收用：选择设备 → 开始捕获 → 音量条跳动 → 显示每秒块数。
 音频线程的音量通过 Qt 信号转发到主线程（禁止跨线程直改 UI）。
+Mac 首选项「系统声音（免驱动）」走 ScreenCaptureKit；其余走 sounddevice。
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Protocol
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -19,6 +23,22 @@ from PySide6.QtWidgets import (
 
 from ..capture.capture import CaptureError, SystemAudioCapture
 from ..capture.devices import BLOCK_MS
+from ..capture.sck import SCKCaptureError
+from ..capture.sck_capture import SCKSystemAudioCapture
+
+# 下拉框特殊项：免驱动系统声音（非 sounddevice 设备索引）
+SCK_ENTRY = "系统声音（免驱动 · macOS 13+）"
+
+
+class _CaptureLike(Protocol):
+    """两个捕获器共同的最小接口（UI 只用这些）。"""
+
+    @property
+    def blocks_received(self) -> int: ...
+
+    def set_level_callback(self, cb: Callable[[float], None]) -> None: ...
+
+    def stop(self) -> None: ...
 
 
 class LevelRelay(QObject):
@@ -37,8 +57,11 @@ class CaptureTestWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("live-caption · 捕获测试")
-        self.resize(420, 240)
-        self._capture = SystemAudioCapture()
+        self.resize(460, 260)
+        self._device_capture = SystemAudioCapture()
+        self._sck_capture = SCKSystemAudioCapture()
+        self._active_tag: str | None = None  # 当前在跑的捕获器："sck" | "device" | None
+        self._update_stats_source: _CaptureLike | None = None  # 块数统计源
         self._last_blocks = 0
         self._max_level_recent = 0.0
 
@@ -82,28 +105,49 @@ class CaptureTestWindow(QMainWindow):
         import sounddevice as sd
 
         self._device_combo.clear()
+        self._device_combo.addItem(SCK_ENTRY, None)  # 首选：免驱动系统声音
         for i, d in enumerate(sd.query_devices()):
             if d["max_input_channels"] > 0:
                 self._device_combo.addItem(f"{d['name']}", i)
 
     def _toggle(self) -> None:
-        if self._capture.running:
-            self._capture.stop()
-            self._timer.stop()
-            self._toggle_btn.setText("开始捕获")
-            self._error_label.setText("")
+        if self._active_tag is not None:
+            self._stop_capture()
             return
         self._error_label.setText("")
-        device_index = self._device_combo.currentData()
+        selection = self._device_combo.currentData()
         try:
-            self._capture.set_level_callback(self._relay.emit_level)
-            device = self._capture.start(device_index=device_index)
-            self.setWindowTitle(f"live-caption · 捕获中: {device.name}")
+            if selection is None:
+                self._sck_capture.set_level_callback(self._relay.emit_level)
+                self._sck_capture.start()
+                self._active_tag = "sck"
+                self._update_stats_source = self._sck_capture
+                self.setWindowTitle("live-caption · 捕获中: 系统声音（免驱动）")
+            else:
+                self._device_capture.set_level_callback(self._relay.emit_level)
+                device = self._device_capture.start(device_index=selection)
+                self._active_tag = "device"
+                self._update_stats_source = self._device_capture
+                self.setWindowTitle(f"live-caption · 捕获中: {device.name}")
             self._last_blocks = 0
             self._timer.start()
             self._toggle_btn.setText("停止捕获")
-        except CaptureError as e:
+        except (CaptureError, SCKCaptureError) as e:
+            self._active_tag = None
+            self._update_stats_source = None
             self._error_label.setText(str(e))
+
+    def _stop_capture(self) -> None:
+        if self._active_tag == "sck":
+            self._sck_capture.stop()
+        elif self._active_tag == "device":
+            self._device_capture.stop()
+        self._active_tag = None
+        self._update_stats_source = None
+        self._timer.stop()
+        self._toggle_btn.setText("开始捕获")
+        self._error_label.setText("")
+        self.setWindowTitle("live-caption · 捕获测试")
 
     def _on_level(self, level: float) -> None:
         """主线程槽：更新音量条（信号驱动，不轮询）。"""
@@ -112,17 +156,20 @@ class CaptureTestWindow(QMainWindow):
         self._level_label.setText("音量: " + "▁" * (10 - bars) + "▇" * bars)
 
     def _update_stats(self) -> None:
-        blocks = self._capture.blocks_received
+        # 衰减：本秒结束清零峰值并让音量条回落（无论是否在捕获中）
+        if self._max_level_recent > 0:
+            self._max_level_recent = 0.0
+            self._level_label.setText("音量: ▁▁▁▁▁▁▁▁▁▁")
+        if self._update_stats_source is None:
+            return
+        blocks = self._update_stats_source.blocks_received  # 两个捕获器接口一致
         per_sec = blocks - self._last_blocks
         self._last_blocks = blocks
         self._stats_label.setText(
             f"块数: {blocks}（本秒 +{per_sec}，目标每秒约 {1000 // BLOCK_MS}）"
         )
-        # 衰减：本秒结束清零峰值并让音量条回落
-        if self._max_level_recent > 0:
-            self._max_level_recent = 0.0
-            self._level_label.setText("音量: ▁▁▁▁▁▁▁▁▁▁")
 
     def closeEvent(self, event: object) -> None:  # noqa: N802 - Qt 命名
-        self._capture.stop()
+        if self._active_tag is not None:
+            self._stop_capture()
         super().closeEvent(event)  # type: ignore[arg-type]
