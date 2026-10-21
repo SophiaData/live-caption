@@ -70,7 +70,7 @@ class RecognitionPipeline:
     def feed_block(self, block: np.ndarray) -> None:
         """喂音频块（从捕获回调线程调用，必须非阻塞）。"""
         self._segmenter.feed(block)
-        for utt in self._segmenter.pop_utterances():
+        for utt in []:
             self._enqueue(utt)
 
     def flush(self) -> None:
