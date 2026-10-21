@@ -5,7 +5,7 @@
 2. 未授权 → Quartz.CGRequestScreenCaptureAccess() 触发系统弹窗
 3. 弹窗被拒 → denied_hint 人话指引
 4. 授权后 SCShareableContent.getShareableContentWithCompletionHandler_ 拿显示器列表
-5. SCContentFilter.filterWithDisplay_excludingApplications_ 过滤整显示器
+5. SCContentFilter.initWithDisplay_excludingApplications_exceptingWindows_ 过滤整显示器
 6. SCStreamConfiguration：capturesAudio=True、excludesCurrentProcessAudio=True（不抓自己）、
    sampleRate=16000、queueDepth 小值保低延迟；不请求视频
 7. SCStream + addStreamOutput(SCStreamOutputTypeAudio=1)，delegate 实现音频帧回调
@@ -21,6 +21,7 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+import objc
 
 from .sck import (
     SCK_OUTPUT_TYPE_AUDIO,
@@ -41,40 +42,43 @@ def _sck_modules() -> dict[str, Any]:
     return {"Quartz": Quartz, "sck": sck}
 
 
-class SCKStreamDelegate:  # pragma: no cover - PyObjC 桥由集成验证
-    """SCStream delegate mixin：实现可选协议方法 stream:didOutputSampleBuffer:ofType:。
-
-    PyObjC 中 NSObject 子类实现下划线形式的方法名即响应 selector。
-    """
-
-    def initWithCallback_(self: Any, on_audio: Callable[[np.ndarray, int], None]) -> Any:
-        # mypy 不知道 NSObject 有 init，忽略类型检查
-        self = super().init()  # type: ignore[misc]
-        if self is not None:
-            self._on_audio = on_audio
-        return self
-
-    def stream_didOutputSampleBuffer_ofType_(
-        self: Any, stream: Any, sample_buffer: Any, frame_type: Any
-    ) -> None:
-        if int(frame_type) != SCK_OUTPUT_TYPE_AUDIO:
-            return
-        parsed = extract_audio_samples(sample_buffer)
-        if parsed is None:
-            return
-        samples, rate = parsed
-        if len(samples) > 0:
-            self._on_audio(samples, rate)
+_DELEGATE_CLASS: Any = None
 
 
 def _make_delegate_class() -> Any:
-    """生成 PyObjC delegate 类（延迟到 start 调用时，避免非 Mac 导入失败）。"""
+    """生成（并缓存）PyObjC delegate 类。
+
+    重要两点（都曾导致收不到音频帧/崩溃）：
+    1. stream:didOutputSampleBuffer:ofType: 必须直接定义在 NSObject 子类内 ——
+       从纯 Python 基类继承的方法 PyObjC 不会注册成 ObjC selector。
+    2. ObjC 类名必须全局唯一且只创建一次 —— 重复创建同名类会报 overriding，
+       因此这里做模块级缓存，整个进程复用同一个类。
+    """
+    global _DELEGATE_CLASS
+    if _DELEGATE_CLASS is not None:
+        return _DELEGATE_CLASS
+
     from Foundation import NSObject
 
-    class _Delegate(SCKStreamDelegate, NSObject):  # type: ignore[misc]
-        pass
+    class _LCDStreamDelegate(NSObject):  # type: ignore[misc]
+        def initWithCallback_(self, on_audio):  # type: ignore[no-untyped-def]
+            self = objc.super(_LCDStreamDelegate, self).init()
+            if self is not None:
+                self._on_audio = on_audio
+            return self
 
-    return _Delegate
+        def stream_didOutputSampleBuffer_ofType_(self, stream, sample_buffer, frame_type):  # type: ignore[no-untyped-def]
+            if int(frame_type) != SCK_OUTPUT_TYPE_AUDIO:
+                return
+            parsed = extract_audio_samples(sample_buffer)
+            if parsed is None:
+                return
+            samples, rate = parsed
+            if len(samples) > 0:
+                self._on_audio(samples, rate)
+
+    _DELEGATE_CLASS = _LCDStreamDelegate
+    return _DELEGATE_CLASS
 
 
 class SCKSession:
@@ -89,7 +93,6 @@ class SCKSession:
         mods = _sck_modules()
         Quartz = mods["Quartz"]
         sck = mods["sck"]
-        from Foundation import NSDate, NSRunLoop
 
         # 1. 授权（preflight → 请求弹窗 → 拒绝给指引）
         if not Quartz.CGPreflightScreenCaptureAccess():
@@ -104,11 +107,7 @@ class SCKSession:
             content_box.append((content, error))
 
         sck.SCShareableContent.getShareableContentWithCompletionHandler_(on_content)
-        deadline = NSDate.dateWithTimeIntervalSinceNow_(15.0)
-        while not content_box and NSDate.date().laterDate_(deadline) is not deadline:
-            NSRunLoop.currentRunLoop().runMode_beforeDate_(
-                "kCFRunLoopDefaultMode", NSDate.dateWithTimeIntervalSinceNow_(0.1)
-            )
+        self._pump_until(lambda: bool(content_box), timeout_s=15.0)
         if not content_box:
             raise SCKCaptureError("获取屏幕内容超时，请重试。")
         content, error = content_box[0]
@@ -121,10 +120,12 @@ class SCKSession:
             raise SCKCaptureError("未找到活动的显示器，无法捕获声音。")
 
         # 3. 过滤器 + 配置（只声音，排除本应用自己的提示音）
-        filt = sck.SCContentFilter.filterWithDisplay_excludingApplications_(displays[0], None)
+        filt = sck.SCContentFilter.alloc().initWithDisplay_excludingApplications_exceptingWindows_(
+            displays[0], None, None
+        )
         config = sck.SCStreamConfiguration.alloc().init()
         config.setCapturesAudio_(True)
-        config.setExcludesCurrentProcessAudio_(True)
+        config.setExcludesCurrentProcessAudio_(False)  # 不排除本进程（确保能收到所有系统声音）
         config.setSampleRate_(TARGET_SAMPLE_RATE)
         config.setQueueDepth_(3)  # 低延迟
 
@@ -152,16 +153,43 @@ class SCKSession:
             done_box.append(True)
 
         stream.startCaptureWithCompletionHandler_(on_started)
-        deadline = NSDate.dateWithTimeIntervalSinceNow_(15.0)
-        while not done_box and NSDate.date().laterDate_(deadline) is not deadline:
-            NSRunLoop.currentRunLoop().runMode_beforeDate_(
-                "kCFRunLoopDefaultMode", NSDate.dateWithTimeIntervalSinceNow_(0.1)
-            )
+        self._pump_until(lambda: bool(done_box), timeout_s=15.0)
         if not done_box:
             self._try_stop(stream)
             raise SCKCaptureError("启动捕获超时，请重试；若反复失败请重新授权。")
         self._stream = stream
         logger.info("SCK 流已启动")
+
+    @staticmethod
+    def _pump_until(predicate: Any, timeout_s: float) -> None:
+        """等待 predicate 为真，期间驱动事件循环。
+
+        关键：在 Qt 应用里主线程 runloop 已被 Qt 接管，手动跑 NSRunLoop.runMode
+        无法泵出 SCK 回调（会一直超时）。所以有 QApplication 时用 processEvents，
+        否则才退回 NSRunLoop。
+        """
+        import time
+
+        from Foundation import NSDate, NSRunLoop
+
+        deadline = time.monotonic() + timeout_s
+        try:
+            from PySide6.QtWidgets import QApplication
+
+            has_qt = QApplication.instance() is not None
+        except Exception:  # noqa: BLE001 - 无 Qt 环境
+            has_qt = False
+
+        if has_qt:
+            app = QApplication.instance()
+            while not predicate() and time.monotonic() < deadline:
+                app.processEvents()  # type: ignore[union-attr]
+                time.sleep(0.01)
+        else:
+            while not predicate() and time.monotonic() < deadline:
+                NSRunLoop.currentRunLoop().runMode_beforeDate_(
+                    "kCFRunLoopDefaultMode", NSDate.dateWithTimeIntervalSinceNow_(0.05)
+                )
 
     def _on_audio_frame(self, samples: np.ndarray, rate: int) -> None:
         """delegate 回调（SCK 音频队列线程）：重采样 + 音量，交给上层。"""

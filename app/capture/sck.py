@@ -78,46 +78,46 @@ def resample_to_16k(samples: np.ndarray, src_rate: int) -> np.ndarray:
 
 
 def extract_audio_samples(sample_buffer: object) -> tuple[np.ndarray, int] | None:
-    """从 CMSampleBuffer 抽 (mono float32 数组, 采样率)。返回 None 表示非音频帧。
+    """从 CMSampleBuffer 抽 (float32 数组, 采样率)。返回 None 表示非音频帧。
 
-    生产由 PyObjC 回调喂真数据；解析失败一律按「跳过该帧」处理，不让流崩。
+    已在本机 macОС 26 实测通过的 API 用法：
+    - ASBD 由 PyObjC 返回为元组（非结构体），声道数在 [6]、采样率在 [0]
+    - PCM 用 CMSampleBufferGetDataBuffer + CMBlockBufferCopyDataBytes，
+      out 参数必须是 ctypes 数组（长度=字节数）
     """
     try:
+        import ctypes
+
         import CoreMedia
 
         fmt = CoreMedia.CMSampleBufferGetFormatDescription(sample_buffer)
-        asbd = CoreMedia.CMFormatDescriptionGetAudioStreamBasicDescription(fmt)
+        if fmt is None:
+            return None
+        asbd = CoreMedia.CMAudioFormatDescriptionGetStreamBasicDescription(fmt)
         if asbd is None:
-            return None  # 非音频帧（SCK 配置了只出音频，防御性保留）
-        channels = int(asbd.mChannelsPerFrame)
-        rate = int(asbd.mSampleRate)
-        bl = CoreMedia.CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sample_buffer)
-        if bl is None:
             return None
-        # AudioBufferList: (UInt32 numBuffers, AudioBuffer[mNumBuffers])
-        # AudioBuffer: (UInt32 mNumberChannels, UInt32 mDataByteSize, void* mData)
-        import ctypes
+        if isinstance(asbd, tuple):
+            rate = int(asbd[0]) or 16000
+            channels = int(asbd[6]) or 1
+        else:
+            rate = int(asbd.mSampleRate) or 16000
+            channels = int(asbd.mChannelsPerFrame) or 1
 
-        class _AB(ctypes.Structure):
-            _fields_ = [
-                ("mNumberChannels", ctypes.c_uint32),
-                ("mDataByteSize", ctypes.c_uint32),
-                ("mData", ctypes.c_void_p),
-            ]
-
-        class _ABL(ctypes.Structure):
-            _fields_ = [
-                ("mNumberBuffers", ctypes.c_uint32),
-                ("mBuffers", _AB * 1),
-            ]
-
-        # PyObjC 返回的 AudioBufferList 是可 ctypes 桥接的对象：取首缓冲数据
-        first = bl.mBuffers[0] if hasattr(bl, "mBuffers") else None
-        if first is None or not first.mData:
+        data_buf = CoreMedia.CMSampleBufferGetDataBuffer(sample_buffer)
+        if data_buf is None:
             return None
-        size = int(first.mDataByteSize)
-        data = ctypes.string_at(first.mData, size)
-        return _interleaved_to_mono(data, max(1, channels)), rate
+        length = int(CoreMedia.CMBlockBufferGetDataLength(data_buf))
+        if length <= 0:
+            return None
+        buf = (ctypes.c_char * length)()
+        result = CoreMedia.CMBlockBufferCopyDataBytes(data_buf, 0, length, buf)
+        # 返回 (status, buffer)；status==0 表示成功
+        status = result[0] if isinstance(result, tuple) else result
+        if status != 0:
+            return None
+        raw = bytes(buf)
+        samples = _interleaved_to_mono(raw, channels)
+        return samples, rate
     except Exception:  # noqa: BLE001 - 任何解析失败都按"跳过该帧"处理，不让流崩
         logger.exception("音频帧解析失败，跳过")
         return None
