@@ -22,20 +22,22 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: 安装依赖
+      - name: 建虚拟环境并装依赖（与本地一致，含开发工具）
         run: |
-          python -m pip install --upgrade pip
-          pip install PySide6 sounddevice httpx numpy pyinstaller \
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install PySide6 sounddevice httpx numpy \
             pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-Quartz \
             pyobjc-framework-ScreenCaptureKit pyobjc-framework-AVFoundation \
-            pyobjc-framework-CoreAudio pyobjc-framework-CoreMedia
+            pyobjc-framework-CoreAudio pyobjc-framework-CoreMedia \
+            mypy ruff pytest pytest-qt pytest-mock pyinstaller
 
       - name: 跑质量门（全绿才允许打包）
         run: make check
 
       - name: PyInstaller 打包
         run: |
-          pyinstaller live-caption.spec --noconfirm
+          .venv/bin/pyinstaller live-caption.spec --noconfirm
 
       - name: 制作 DMG
         run: |
