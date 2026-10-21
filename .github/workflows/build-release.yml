@@ -1,0 +1,79 @@
+name: build-release
+
+# 打 tag（如 v0.1.0）时自动构建 macOS 安装包并发布到 GitHub Release
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:  # 也允许手动触发测试
+
+permissions:
+  contents: write  # 需要写权限上传 Release 资产
+
+jobs:
+  build-macos:
+    runs-on: macos-14  # Apple Silicon runner；如需 Intel 改 macos-13
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install PySide6 sounddevice httpx numpy pyobjc-framework-ScreenCaptureKit pyobjc-framework-AVFoundation pyobjc-framework-Foundation pyinstaller
+
+      - name: 跑质量门（全绿才允许打包）
+        run: make check
+
+      - name: PyInstaller 打包
+        run: |
+          pyinstaller live-caption.spec --noconfirm
+
+      - name: 制作 DMG
+        run: |
+          mkdir -p dist/dmg
+          cp -R dist/live-caption.app dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname "live-caption" -srcfolder dist/dmg -ov -format UDZO dist/live-caption-macos.dmg
+          ls -lh dist/
+
+      - name: 压缩 .app（备用产物）
+        run: |
+          cd dist && zip -qry live-caption-macos-app.zip live-caption.app
+
+      - name: 上传构建产物（即使不发布也保留）
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-caption-macos
+          path: |
+            dist/live-caption-macos.dmg
+            dist/live-caption-macos-app.zip
+
+      - name: 发布到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/live-caption-macos.dmg
+            dist/live-caption-macos-app.zip
+          generate_release_notes: true
+          body: |
+            ## live-caption ${{ github.ref_name }}
+
+            把电脑正在播放的声音实时变成中英双语悬浮字幕。
+
+            ### 安装（macOS 13+）
+            1. 下载 `live-caption-macos.dmg`
+            2. 打开 DMG，把 live-caption 拖进「应用程序」
+            3. **首次打开若提示「无法验证开发者」**：到「系统设置 → 隐私与安全性」点「仍要打开」
+               （本包未做苹果签名公证，这是正常提示）
+            4. 首次运行按向导配置识别/翻译服务
+
+            ### 说明
+            - 免驱动捕获系统声音，首次需授权一次「屏幕录制」
+            - 识别用云端 API（如硅基流动）或本地识别；翻译用任意 OpenAI 兼容大模型
