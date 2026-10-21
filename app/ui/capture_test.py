@@ -1,11 +1,12 @@
 """UI：捕获测试页。
 
 验收用：选择设备 → 开始捕获 → 音量条跳动 → 显示每秒块数。
+音频线程的音量通过 Qt 信号转发到主线程（禁止跨线程直改 UI）。
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -20,6 +21,16 @@ from ..capture.capture import CaptureError, SystemAudioCapture
 from ..capture.devices import BLOCK_MS
 
 
+class LevelRelay(QObject):
+    """把音频线程的音量回调转成 Qt 信号（自动排队到主线程）。"""
+
+    levelChanged = Signal(float)
+
+    def emit_level(self, level: float) -> None:
+        """供音频回调线程调用；信号跨线程自动走 queued connection。"""
+        self.levelChanged.emit(level)
+
+
 class CaptureTestWindow(QMainWindow):
     """捕获测试窗口：验证系统声音真的进了管道。"""
 
@@ -29,6 +40,10 @@ class CaptureTestWindow(QMainWindow):
         self.resize(420, 240)
         self._capture = SystemAudioCapture()
         self._last_blocks = 0
+        self._max_level_recent = 0.0
+
+        self._relay = LevelRelay()
+        self._relay.levelChanged.connect(self._on_level)
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -81,6 +96,7 @@ class CaptureTestWindow(QMainWindow):
         self._error_label.setText("")
         device_index = self._device_combo.currentData()
         try:
+            self._capture.set_level_callback(self._relay.emit_level)
             device = self._capture.start(device_index=device_index)
             self.setWindowTitle(f"live-caption · 捕获中: {device.name}")
             self._last_blocks = 0
@@ -89,6 +105,12 @@ class CaptureTestWindow(QMainWindow):
         except CaptureError as e:
             self._error_label.setText(str(e))
 
+    def _on_level(self, level: float) -> None:
+        """主线程槽：更新音量条（信号驱动，不轮询）。"""
+        self._max_level_recent = max(self._max_level_recent, level)
+        bars = min(10, int(self._max_level_recent * 10) + (1 if self._max_level_recent > 0 else 0))
+        self._level_label.setText("音量: " + "▁" * (10 - bars) + "▇" * bars)
+
     def _update_stats(self) -> None:
         blocks = self._capture.blocks_received
         per_sec = blocks - self._last_blocks
@@ -96,11 +118,10 @@ class CaptureTestWindow(QMainWindow):
         self._stats_label.setText(
             f"块数: {blocks}（本秒 +{per_sec}，目标每秒约 {1000 // BLOCK_MS}）"
         )
-
-    def set_level(self, level: float) -> None:
-        """由音量回调驱动（跨线程安全由 Qt 信号保证时可改为信号；测试页用轮询近似）。"""
-        bars = min(10, int(level * 10) + (1 if level > 0 else 0))
-        self._level_label.setText("音量: " + "▁" * (10 - bars) + "▇" * bars)
+        # 衰减：本秒结束清零峰值并让音量条回落
+        if self._max_level_recent > 0:
+            self._max_level_recent = 0.0
+            self._level_label.setText("音量: ▁▁▁▁▁▁▁▁▁▁")
 
     def closeEvent(self, event: object) -> None:  # noqa: N802 - Qt 命名
         self._capture.stop()
