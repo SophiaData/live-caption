@@ -1,0 +1,20 @@
+# 依赖与环境
+.venv/
+
+# 密钥（开发期）
+.env
+
+# 构建产物
+dist/
+build/
+
+# 本地数据
+*.sqlite3
+backups/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
