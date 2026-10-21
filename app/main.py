@@ -1,16 +1,20 @@
-"""live-caption 应用主入口（骨架版）。
+"""live-caption 应用主入口。
 
-启动后显示一个最小主窗口，验证 GUI 链路与测试基础设施可跑通。
+当前阶段（功能 #2）：启动后直接进「捕获测试」页，验证系统声音捕获链路。
 """
+
+import sys
 
 
 def main() -> None:
-    from PySide6.QtWidgets import QLabel, QMainWindow
+    from PySide6.QtWidgets import QApplication
 
-    window = QMainWindow()
-    window.setWindowTitle("live-caption")
-    window.setCentralWidget(QLabel("live-caption 骨架就绪"))
-    window.show()  # pragma: no cover - GUI 冒烟由 pytest-qt 承担
+    from .ui.capture_test import CaptureTestWindow
+
+    app = QApplication(sys.argv)
+    window = CaptureTestWindow()
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
