@@ -30,14 +30,32 @@ class ModelConfig:
     timeout_s: float = 30.0
 
 
+def _clean_no_proxy_env() -> None:
+    """就地清理系统 NO_PROXY 里的非法条目（如 [::1]），避免 httpx 构造崩溃。
+
+    某些 macOS 环境 NO_PROXY="...,[::1]"，[..] 里的冒号会被 httpx 0.28 误当端口。
+    这是环境值的问题，清理掉方括号条目对代理行为无实质影响。
+    """
+    import os
+    import re
+
+    for key in ("NO_PROXY", "no_proxy"):
+        v = os.environ.get(key)
+        if not v:
+            continue
+        parts = [p.strip() for p in v.split(",") if p.strip()]
+        filtered = [p for p in parts if not re.search(r"\[[^\]]*:[^\]]*\]", p)]
+        if len(filtered) != len(parts):
+            os.environ[key] = ",".join(filtered)
+
+
 class OpenAICompatibleClient:
     """OpenAI 兼容 API 客户端（识别 + 翻译双槽位共用）。"""
 
     def __init__(self, config: ModelConfig) -> None:
         self._cfg = config
-        # trust_env=True 会让 httpx 读取全局代理变量；某些环境（如 NO_PROXY 含 [::1]）
-        # 会触发 httpx 0.28 的 URL 解析 bug。这里显式开启 trust_env（用户可能确实需要代理），
-        # 但把 base_url 去掉、改为每次请求拼完整 URL，避免构造期解析异常。
+        # 先清理坏的 NO_PROXY（含 [::1] 会致 httpx 构造期 InvalidURL）
+        _clean_no_proxy_env()
         self._client = httpx.Client(
             headers={"Authorization": f"Bearer {config.api_key}"},
             timeout=config.timeout_s,

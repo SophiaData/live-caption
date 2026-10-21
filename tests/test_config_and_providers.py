@@ -118,3 +118,17 @@ class TestOpenAICompatibleClient:
         call = mock_post.call_args
         assert call[0][0].endswith("/audio/transcriptions")
         assert "file" in call[1]["files"]
+
+
+class TestNoProxyBugFix:
+    def test_client_constructs_with_bad_no_proxy(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """回归测试：NO_PROXY 含 [::1] 时构造客户端不能崩（曾导致测试连接永久卡住）。"""
+        monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1,::1,[::1]")
+        # 构造不应抛异常
+        cfg = ModelConfig(base_url="https://api.test.com/v1", api_key="sk-x", model="m")
+        client = OpenAICompatibleClient(cfg)
+        assert client is not None
+        # 坏条目应被清理
+        import os
+
+        assert "[::1]" not in os.environ.get("NO_PROXY", "")
