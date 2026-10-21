@@ -28,8 +28,8 @@ hiddenimports = [
 ]
 
 a = Analysis(
-    ["app/main.py"],
-    pathex=[],
+    ["run_app.py"],
+    pathex=[".", "app"],
     binaries=[],
     datas=[],
     hiddenimports=hiddenimports,
