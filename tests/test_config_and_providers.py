@@ -93,6 +93,27 @@ class TestOpenAICompatibleClient:
         assert ok is False
         assert "密钥" in msg or "401" in msg
 
+    def test_chat_404_returns_model_not_found_hint(self) -> None:
+        """404 响应返回「模型不存在」的人话（清账 TD-6）。
+
+        断言取该分支独有文案「模型不存在」：若删掉实现里的 404 分支，响应会落到
+        「意外响应（404）」，此测试必红，从而真正锁住这条分支。
+        """
+        cfg = ModelConfig(
+            base_url="https://api.test.com/v1", api_key="sk-test", model="gpt-not-real"
+        )
+        client = OpenAICompatibleClient(cfg)
+        with patch.object(client._client, "post") as mock_post:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 404
+            mock_resp.text = "model not found"
+            mock_post.return_value = mock_resp
+            ok, msg = client.test_connection(mode="chat")
+        assert ok is False
+        assert "模型不存在" in msg
+        assert "404" in msg
+        assert "gpt-not-real" in msg  # 人话里带上填错的模型名，便于用户自查
+
     def test_chat_timeout_returns_network_hint(self) -> None:
         """超时返回网络人话。"""
         import httpx
