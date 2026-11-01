@@ -23,7 +23,7 @@ make run
 
 项目仅支持 Python 3.12 及以上版本；Python 3.9 不在支持范围内。
 
-首次安装依赖：
+首次安装依赖（默认使用 Python 3.12；如果 `python3.12` 不在 PATH 上，用 `make setup PYTHON=/path/to/python3.12` 指定解释器）：
 
 ```bash
 make setup
