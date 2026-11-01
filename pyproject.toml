@@ -3,6 +3,32 @@ name = "live-caption"
 version = "0.1.0"
 description = "实时双语字幕：把电脑正在播放的声音实时变成原文+译文悬浮字幕"
 requires-python = ">=3.12"
+dependencies = [
+    "PySide6",
+    "httpx",
+    "numpy",
+    "sounddevice",
+    "pyobjc-core; sys_platform == \"darwin\"",
+    "pyobjc-framework-Cocoa; sys_platform == \"darwin\"",
+    "pyobjc-framework-Quartz; sys_platform == \"darwin\"",
+    "pyobjc-framework-ScreenCaptureKit; sys_platform == \"darwin\"",
+    "pyobjc-framework-AVFoundation; sys_platform == \"darwin\"",
+    "pyobjc-framework-CoreAudio; sys_platform == \"darwin\"",
+    "pyobjc-framework-CoreMedia; sys_platform == \"darwin\"",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-qt",
+    "pytest-mock",
+    "pyinstaller",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.ruff]
 line-length = 100

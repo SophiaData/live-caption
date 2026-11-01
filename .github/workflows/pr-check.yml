@@ -25,12 +25,7 @@ jobs:
       - name: 建虚拟环境并装依赖（与 build-release 一致）
         run: |
           python -m venv .venv
-          .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install PySide6 sounddevice httpx numpy \
-            pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-Quartz \
-            pyobjc-framework-ScreenCaptureKit pyobjc-framework-AVFoundation \
-            pyobjc-framework-CoreAudio pyobjc-framework-CoreMedia \
-            mypy ruff pytest pytest-qt pytest-mock
+          .venv/bin/pip install -e ".[dev]"
 
       - name: 跑质量门
         run: make check
