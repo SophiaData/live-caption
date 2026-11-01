@@ -23,32 +23,18 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: 创建虚拟环境并安装质量门依赖
+      - name: 建虚拟环境并装依赖（与 build-release 一致）
         run: |
           python -m venv .venv
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install \
-            ruff==0.17.3 \
-            mypy==0.991 \
-            pytest==8.4.2 \
-            pytest-qt \
-            pytest-mock \
-            httpx==0.28.1 \
-            numpy==1.24.4 \
-            PySide6==6.10.3 \
-            sounddevice==0.5.6
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install PySide6 sounddevice httpx numpy \
+            pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-Quartz \
+            pyobjc-framework-ScreenCaptureKit pyobjc-framework-AVFoundation \
+            pyobjc-framework-CoreAudio pyobjc-framework-CoreMedia \
+            mypy ruff pytest pytest-qt pytest-mock
 
-      - name: 安装 macOS 依赖
-        if: runner.os == 'macOS'
-        run: |
-          .venv/bin/python -m pip install \
-            pyobjc-core \
-            pyobjc-framework-Cocoa \
-            pyobjc-framework-Quartz \
-            pyobjc-framework-ScreenCaptureKit \
-            pyobjc-framework-AVFoundation \
-            pyobjc-framework-CoreAudio \
-            pyobjc-framework-CoreMedia
+      - name: 跑质量门
+        run: make check
 
       - name: 跑质量门
         run: make check
