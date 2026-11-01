@@ -1,5 +1,9 @@
 # 质量门：format + lint + 类型检查 + 测试，一条命令全跑
-.PHONY: check run
+.PHONY: setup check run
+
+setup:
+	python -m venv .venv
+	.venv/bin/pip install -e ".[dev]"
 
 check:
 	.venv/bin/ruff format --check app tests

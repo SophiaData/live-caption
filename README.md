@@ -21,8 +21,18 @@ make run
 
 ## 开发
 
+项目仅支持 Python 3.12 及以上版本；Python 3.9 不在支持范围内。
+
+首次安装依赖：
+
 ```bash
-make check   # 质量门：格式 + lint + 类型 + 测试
+make setup
+```
+
+运行质量门：
+
+```bash
+make check   # 格式 + lint + 类型 + 测试
 ```
 
 ## 文档
