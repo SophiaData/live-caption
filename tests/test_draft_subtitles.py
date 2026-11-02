@@ -146,7 +146,12 @@ class TestSegmenterDraft:
             seg = Segmenter(
                 SegmenterConfig(max_utterance_s=99.0),
                 draft=DraftConfig(
-                    enabled=True, silence_ms=9999, max_s=max_s, min_s=0.2, max_per_utterance=99
+                    enabled=True,
+                    silence_ms=9999,
+                    max_s=max_s,
+                    min_s=0.2,
+                    max_per_utterance=99,
+                    max_window_s=99.0,  # 只看兜底时长，不叠加截断
                 ),
             )
             total = 0
@@ -157,6 +162,28 @@ class TestSegmenterDraft:
 
         assert feed_with(0.5) == 4
         assert feed_with(1.0) == 2
+
+    def test_draft_window_is_capped(self) -> None:
+        """草稿音频有长度上限：句子再长，一次草稿调用也不会和整句一样贵。"""
+        seg = Segmenter(
+            SegmenterConfig(max_utterance_s=99.0),
+            draft=DraftConfig(
+                enabled=True,
+                silence_ms=9999,
+                max_s=0.5,
+                min_s=0.2,
+                max_per_utterance=99,
+                max_window_s=1.0,
+            ),
+        )
+        got: list[Utterance] = []
+        for block in tone_blocks(300):  # 连续说 3 秒
+            seg.feed(block)
+            got += seg.pop_drafts()
+        assert got
+        assert max(len(g.samples) for g in got) <= SAMPLE_RATE + BLOCK_SAMPLES
+        # 开头一段不再变长后不该重复送：省额度，也不顶住定稿
+        assert len(got) == 2
 
     def test_max_per_utterance_caps_cost(self) -> None:
         """单句草稿次数有上限（成本上限，可配置）。"""
@@ -708,6 +735,49 @@ class TestDraftQueueProtection:
         )
         assert pipe.step()  # 探针放行
         assert pipe.last_rec_cost_s is not None and pipe.last_rec_cost_s >= 0.15
+
+    def test_gate_uses_length_aware_rate_not_absolute_cost(self) -> None:
+        """比值判据：整句识别慢不等于草稿也慢——草稿音频短就应该照送（不误杀）。"""
+        rec = self._SlowRec(0.6)  # 一次整句识别 0.6s（绝对值远大于 0.15s 提前量）
+        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=True))
+        # 先让管道学会比值：一条 6 秒音频的整句 → rate = 0.1 每秒
+        pipe._enqueue(
+            Utterance(samples=np.zeros(96000, dtype=np.float32), start_s=0.0, end_s=6.0, utt_id=1)
+        )
+        assert pipe.step()
+        assert pipe.last_rec_rate is not None and pipe.last_rec_rate < 0.6 / 96000 * 16000 * 3
+        # 再来一条 0.3s 音频、0.15s 提前量的停顿草稿：预计耗时 0.03s < 0.15s → 该送
+        pipe._enqueue_draft(
+            Utterance(
+                samples=np.zeros(4800, dtype=np.float32),
+                start_s=0.0,
+                end_s=0.3,
+                is_draft=True,
+                utt_id=2,
+                draft_lead_s=0.15,
+                draft_trigger="silence",
+            )
+        )
+        assert pipe.step()
+        assert pipe.draft_calls == 1
+        assert pipe.draft_skipped == 0
+
+        # 同样提前量，但音频长到预计耗时超过提前量 → 入队前就拒，一次识别都不调
+        rec_calls_before = rec.n
+        pipe._enqueue_draft(
+            Utterance(
+                samples=np.zeros(96000, dtype=np.float32),
+                start_s=0.0,
+                end_s=6.0,
+                is_draft=True,
+                utt_id=3,
+                draft_lead_s=0.15,
+                draft_trigger="silence",
+            )
+        )
+        assert pipe.step() is False
+        assert pipe.draft_skipped == 1
+        assert rec.n == rec_calls_before
 
     def test_timeout_drafts_are_never_gated(self) -> None:
         """连续说话触发的草稿提前量大，慢服务也照送（这才是「边说边出」的主力）。"""

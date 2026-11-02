@@ -81,7 +81,8 @@ class RecognitionPipeline:
         # 「这条草稿值不值得送」的判据：实测的一次识别耗时（滑动均值）。
         # 停顿触发的草稿只有 0.15s 左右的提前量，若一次识别比这更慢，它既换不来
         # 更早的字，又会让紧随其后的定稿多等一次调用（真服务实测会把排队拖坏）。
-        self._rec_cost_ema: float | None = None
+        self._rec_cost_ema: float | None = None  # 一次调用的滑动耗时（秒）
+        self._rec_rate_ema: float | None = None  # 每秒音频要多少识别时间（比值）
         self._draft_skipped = 0  # 因为「来不及更早」而省掉的草稿数
         self._draft_dropped = 0  # 因背压/已定稿/被取代而丢弃的草稿数
 
@@ -182,30 +183,40 @@ class RecognitionPipeline:
             self._draft_queue.append(draft)
 
     def _timed_transcribe(self, samples: np.ndarray) -> tuple[bool, str]:
-        """调识别器并记下滑动耗时均值，供「这条草稿值不值得送」判断使用。"""
+        """调识别器，并记下「每秒音频要花多少识别时间」的滑动比值。
+
+        比值（而不是绝对耗时）才能拿来预判一条新草稿：草稿音频比整句短得多，
+        绝对均值会把「整句要 1.3s」错当成「草稿也要 1.3s」。
+        """
         t0 = time.monotonic()
         ok, result = self._recognizer.transcribe(samples, 16000)
         cost = time.monotonic() - t0
+        audio_s = max(len(samples) / 16000.0, 1e-3)
         with self._lock:
-            prev = self._rec_cost_ema
-            self._rec_cost_ema = cost if prev is None else 0.6 * prev + 0.4 * cost
+            self._rec_cost_ema = (
+                cost if self._rec_cost_ema is None else 0.6 * self._rec_cost_ema + 0.4 * cost
+            )
+            rate = cost / audio_s
+            self._rec_rate_ema = (
+                rate if self._rec_rate_ema is None else 0.6 * self._rec_rate_ema + 0.4 * rate
+            )
         return ok, result
 
     def _draft_worth_it(self, utt: Utterance) -> bool:
-        """草稿只有在「大概率比定稿更早出现」时才送识别。
+        """草稿只有在「预计能比定稿更早出现」时才送识别。
 
-        停顿触发的提前量固定是 整句静音阈值 − 草稿静音阈值（默认 0.15s）。判据只用实测
-        耗时，不写死阈值：一次识别比这个提前量还慢时，这条草稿注定换不来更早的字，只会
-        让紧随的定稿多等一次调用 → 省掉。还没测过耗时时先放一条探针（否则永远学不到）。
-        连续说话触发的草稿按剩余可说时长算提前量，通常远大于一次识别，照旧送。
+        预计耗时 = 实测的每秒音频识别比值 × 这条草稿自己的音频长度（草稿已被
+        `max_window_s` 限住长度，所以占用有上界）；预计比它的提前量还慢，就注定换不来
+        更早的字，只会让紧随的定稿多排队 → 直接省掉。没测过时先放一条探针学会比值。
         """
         if utt.draft_trigger != "silence":
-            return True
+            return True  # 连续说话的提前量大（到强制切分才定稿），照旧送
         with self._lock:
-            ema = self._rec_cost_ema
-        if ema is None:
+            rate = self._rec_rate_ema
+        if rate is None:
             return True  # 第一条探针：让它跑一次，之后就学会了
-        return utt.draft_lead_s >= ema
+        est_s = rate * max(len(utt.samples) / 16000.0, 1e-3)
+        return utt.draft_lead_s >= est_s
 
     @property
     def draft_skipped(self) -> int:
@@ -214,9 +225,15 @@ class RecognitionPipeline:
 
     @property
     def last_rec_cost_s(self) -> float | None:
-        """最近一次识别的滑动耗时（秒）；没调用过就是 None。"""
+        """一次识别的滑动耗时（秒）；没调用过就是 None。"""
         with self._lock:
             return self._rec_cost_ema
+
+    @property
+    def last_rec_rate(self) -> float | None:
+        """「每秒音频要花多少识别时间」的滑动比值；没调用过就是 None。"""
+        with self._lock:
+            return self._rec_rate_ema
 
     def _is_settled(self, utt_id: int) -> bool:
         """这句是否已经定稿上屏（读锁内：worker 与音频线程会并发增删这个队列）。"""
