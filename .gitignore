@@ -23,3 +23,6 @@ __pycache__/
 .coverage
 .coverage.*
 htmlcov/
+
+# 构建产物：本地可编辑安装产生
+*.egg-info/
