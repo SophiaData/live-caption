@@ -24,15 +24,20 @@ run:
 
 # 端到端字幕延迟分阶段报告（Issue #16）：确定性假件基准，不联网、不需要密钥
 # 假件耗时与句长可参数注入，例如：make latency TR_MS=1200 SENTENCES=1.5,2.0
+# 加跑「边说边出」对比（Issue #17）：make latency DRAFT=1
 # 真服务模式（需先在配置向导配好识别+翻译服务）：make latency LIVE=1 或 make latency-live
 REC_MS ?= 400
 TR_MS ?= 600
 UI_MS ?= 20
 SENTENCES ?= 1.5,2.0,2.5
+DRAFT_SILENCE_MS ?= 150
+DRAFT_MAX_S ?= 1.2
 
 latency:
 	.venv/bin/python -m app.bench.latency --recognizer-ms $(REC_MS) --translator-ms $(TR_MS) \
-		--ui-ms $(UI_MS) --sentences $(SENTENCES) $(if $(filter 1,$(LIVE)),--live,)
+		--ui-ms $(UI_MS) --sentences $(SENTENCES) $(if $(filter 1,$(LIVE)),--live,) \
+		$(if $(filter 1,$(DRAFT)),--draft,) \
+		--draft-silence-ms $(DRAFT_SILENCE_MS) --draft-max-s $(DRAFT_MAX_S)
 
 latency-live:
-	.venv/bin/python -m app.bench.latency --live
+	.venv/bin/python -m app.bench.latency --live --draft

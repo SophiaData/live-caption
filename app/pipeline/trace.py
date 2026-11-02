@@ -1,6 +1,6 @@
 """端到端字幕延迟的分阶段时间戳（Issue #16：纯观测注入缝）。
 
-设计（见 architecture.md 决策 9/10）：
+设计（见 architecture.md 决策 9/10/11）：
 - LatencyTracer 只往内存里记时钟读数，不做任何 I/O，不改线程模型；
 - 时钟可注入：真实/在线测量用 time.monotonic；确定性基准用 FakeClock，
   由假识别/假翻译按注入的固定耗时「拨表」，全程无真实等待、结果可复现；
@@ -14,6 +14,11 @@
 - 识别 rec：交给识别器 → 识别返回文本
 - 翻译 trans：识别返回 → 译文返回（含先上原文的回调耗时）
 - 上屏 shown：译文返回 → 字幕回调执行完毕（交给显示层）
+
+Issue #17 追加（只加不改：上面五段的语义与 STAGES 元组原样保留）：
+- 草稿首现 draft_shown_at：这一句第一次「边说边出」上屏的时刻；
+- breakdown 额外给出「说完 → 原文出现」与「说完 → 译文出现」两个数（分开），
+  以及「定稿比草稿晚多少」（lead），用于证明功能真的更快，而不是自我感觉良好。
 """
 
 from __future__ import annotations
@@ -27,8 +32,11 @@ from dataclasses import dataclass, field
 
 from .segmenter import Utterance
 
-#: 生命周期打点顺序（split 必须最先打，序号按它分配）
+#: 生命周期打点顺序（split 必须最先打，序号按它分配；语义与 Issue #16 一致，勿改）
 STAGES = ("split", "rec_start", "rec_end", "orig_shown", "tr_start", "tr_end", "shown")
+
+#: 草稿打点（Issue #17 新增；与 STAGES 分开，避免改变既有「完整生命周期」判定）
+DRAFT_STAGES = ("draft_shown",)
 
 
 @dataclass
@@ -39,8 +47,11 @@ class UtteranceTrace:
     """
 
     index: int  # 句序号，从 1 开始（按断句先后）
-    trailing_silence_s: float  # 句尾静音确认时长（「说完」锚点用）
+    trailing_silence_s: float  # 句尾用于确认「说完」的静音时长（延迟观测用，Issue #16）
     times: dict[str, float] = field(default_factory=dict)
+    utt_id: int = 0  # 句标识（Issue #17：草稿与定稿同号，用于对齐）
+    draft_shown_at: float | None = None  # 本句第一次草稿上屏的时钟读数（无草稿则 None）
+    draft_count: int = 0  # 本句补了几次草稿（成本可见性）
 
 
 @dataclass(frozen=True)
@@ -54,6 +65,18 @@ class LatencyBreakdown:
     trans_s: float
     shown_s: float
     total_s: float
+    orig_total_s: float | None = None  # 说完 → 原文出现（Issue #17 追加，分开看）
+    draft_total_s: float | None = None  # 说完 → 草稿首现（负数=话没说完就出现）
+    draft_lead_s: float | None = None  # 定稿上屏 − 草稿首现（草稿比定稿早多少）
+    draft_count: int = 0  # 本句草稿次数（0=未开边说边出）
+
+
+def _totals(tr: UtteranceTrace, speech_done: float) -> tuple[float | None, float | None]:
+    """(说完→原文出现, 说完→草稿首现)；没有对应打点时返回 None（不猜数）。"""
+    orig = tr.times.get("orig_shown")
+    total_orig = orig - speech_done if orig is not None else None
+    total_draft = tr.draft_shown_at - speech_done if tr.draft_shown_at is not None else None
+    return total_orig, total_draft
 
 
 def breakdown(tr: UtteranceTrace) -> LatencyBreakdown | None:
@@ -77,6 +100,8 @@ def breakdown(tr: UtteranceTrace) -> LatencyBreakdown | None:
     else:
         trans = 0.0
         shown = t["shown"] - t["rec_end"]
+    orig_total, draft_total = _totals(tr, speech_done)
+    lead = t["shown"] - tr.draft_shown_at if tr.draft_shown_at is not None else None
     return LatencyBreakdown(
         index=tr.index,
         detect_s=detect,
@@ -85,6 +110,10 @@ def breakdown(tr: UtteranceTrace) -> LatencyBreakdown | None:
         trans_s=trans,
         shown_s=shown,
         total_s=t["shown"] - speech_done,
+        orig_total_s=orig_total,
+        draft_total_s=draft_total,
+        draft_lead_s=lead,
+        draft_count=tr.draft_count,
     )
 
 
@@ -114,10 +143,14 @@ class LatencyTracer:
         pipe = RecognitionPipeline(rec, trans, tracer=tracer)
         ...跑一段时间后读 tracer.traces() / tracer.breakdowns()
 
-    结构：records 是只增不改的历史（上限 max_retained，满时丢最旧）；
+    结构：records 是只增不改的历史（上限 max_retained，满时丢最旧旧）；
     pending 只跟踪「已 split 未上屏」的在途句。在途身份用弱引用核对对象本身，
     句子对象被回收后其 id 若被新句复用，旧记录留在 records 里、绝不覆盖——
     这是基准逐句等待「完成句数」能单调增长的前提。trace 不持有音频样本。
+
+    Issue #17：草稿（不同的 Utterance 对象、与定稿同 utt_id）用 note_draft()
+    登记，不新建记录、不参与「完整生命周期」判定，因此既有五段语义与完成数
+    口径保持不变。
     """
 
     def __init__(
@@ -127,6 +160,7 @@ class LatencyTracer:
         self._lock = threading.Lock()
         self._records: deque[UtteranceTrace] = deque(maxlen=max_retained)
         self._pending: dict[int, tuple[weakref.ReferenceType[Utterance], UtteranceTrace]] = {}
+        self._draft_pending: dict[int, tuple[float, int]] = {}  # utt_id → (最早时刻, 次数)
         self._seq = 0
 
     def mark(self, stage: str, utt: Utterance) -> None:
@@ -141,7 +175,16 @@ class LatencyTracer:
                 if entry is not None:
                     del self._pending[key]
                 self._seq += 1
-                tr = UtteranceTrace(index=self._seq, trailing_silence_s=utt.trailing_silence_s)
+                tr = UtteranceTrace(
+                    index=self._seq,
+                    trailing_silence_s=utt.trailing_silence_s,
+                    utt_id=utt.utt_id,
+                )
+                # 草稿比定稿先打点：把已登记的草稿时刻并入这条新建的记录
+                if utt.utt_id and utt.utt_id in self._draft_pending:
+                    when, count = self._draft_pending.pop(utt.utt_id)
+                    tr.draft_shown_at = when
+                    tr.draft_count = count
                 self._records.append(tr)
                 self._pending[key] = (weakref.ref(utt), tr)
             else:
@@ -154,6 +197,27 @@ class LatencyTracer:
             if maxlen and len(self._pending) > maxlen:  # 防被丢弃句的在途位无限累积
                 for k in [k for k, (r, _) in self._pending.items() if r() is None]:
                     del self._pending[k]
+
+    def note_draft(self, utt: Utterance) -> None:
+        """登记一次草稿上屏（Issue #17）。只保留本句最早的那次。"""
+        if utt.utt_id <= 0:
+            return  # 手工构造、无句标识的句子不参与草稿对齐
+        with self._lock:
+            now = self._clock()
+            for tr in self._records:
+                if tr.utt_id != utt.utt_id:
+                    continue
+                tr.draft_count += 1
+                if tr.draft_shown_at is None or now < tr.draft_shown_at:
+                    tr.draft_shown_at = now
+                return
+            if utt.utt_id not in self._draft_pending:
+                self._draft_pending[utt.utt_id] = (now, 1)
+                if len(self._draft_pending) > (self._records.maxlen or 2048):
+                    self._draft_pending.pop(min(self._draft_pending))
+            else:
+                when, count = self._draft_pending[utt.utt_id]
+                self._draft_pending[utt.utt_id] = (min(when, now), count + 1)
 
     def traces(self) -> list[UtteranceTrace]:
         """按出句先后返回全部 trace。"""

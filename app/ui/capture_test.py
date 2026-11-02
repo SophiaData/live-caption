@@ -26,9 +26,17 @@ from ..capture.capture import CaptureError, SystemAudioCapture
 from ..capture.devices import BLOCK_MS
 from ..capture.sck import SCKCaptureError
 from ..capture.sck_capture import SCKSystemAudioCapture
-from ..config.store import load_config, load_pref, save_pref
+from ..config.store import (
+    load_bool_pref,
+    load_config,
+    load_int_pref,
+    load_pref,
+    save_bool_pref,
+    save_pref,
+)
 from ..pipeline.asr_pipeline import RecognitionPipeline
 from ..pipeline.recognizer import CloudRecognizer, Recognizer
+from ..pipeline.segmenter import DraftConfig
 from ..pipeline.translator import Translator
 from ..providers.openai_compatible import ModelConfig
 from .subtitle_settings import SubtitleSettingsDialog
@@ -36,6 +44,22 @@ from .subtitle_window import SubtitleWindow
 
 SCK_ENTRY = "系统声音（免驱动 · macOS 13+）"
 LOCAL_ASR_ENTRY = "本地识别（faster-whisper，免注册）"
+
+# 边说边出（Issue #17）：开关与子窗口参数都走偏好，不在调用点写魔法数
+PREF_DRAFT_ENABLED = "draft_enabled"
+PREF_DRAFT_SILENCE_MS = "draft_silence_ms"
+PREF_DRAFT_MAX_MS = "draft_max_ms"
+DRAFT_DEFAULT_ENABLED = True
+
+
+def draft_from_prefs() -> DraftConfig:
+    """从偏好构造草稿参数；没配过的项用 DraftConfig 的默认值。"""
+    base = DraftConfig()
+    return DraftConfig(
+        enabled=load_bool_pref(PREF_DRAFT_ENABLED, DRAFT_DEFAULT_ENABLED),
+        silence_ms=load_int_pref(PREF_DRAFT_SILENCE_MS, base.silence_ms),
+        max_s=load_int_pref(PREF_DRAFT_MAX_MS, int(round(base.max_s * 1000))) / 1000.0,
+    )
 
 
 class _CaptureLike(Protocol):
@@ -171,7 +195,9 @@ class CaptureTestWindow(QMainWindow):
             if recognizer is None:
                 self._error_label.setText(err)  # 友好提示，不启动
                 return
-            pipeline = RecognitionPipeline(recognizer, self._build_translator())
+            pipeline = RecognitionPipeline(
+                recognizer, self._build_translator(), draft=draft_from_prefs()
+            )
             self._pipeline = pipeline
             self._asr_label.setText("识别状态: 准备中（首次启动需加载）")
             sub = self._ensure_subtitle()
@@ -233,10 +259,17 @@ class CaptureTestWindow(QMainWindow):
         if getattr(self, "_tray", None) is not None:
             self._tray.set_running(False)
 
-    def _on_asr_text(self, original: str, translation: str, _utt: object) -> None:
+    def _on_asr_text(self, original: str, translation: str, utt: object) -> None:
         """识别线程回调 (原文, 译文) → 转给字幕窗（字幕窗用 Signal 跨线程安全）。"""
-        if self._subtitle is not None:
-            self._subtitle.show_text(original, translation)
+        if self._subtitle is None:
+            return
+        # 草稿与定稿共用同一行：字幕窗按 utt_id 原地替换，迟到的旧草稿盖不住定稿
+        self._subtitle.show_text(
+            original,
+            translation,
+            int(getattr(utt, "utt_id", 0) or 0),
+            bool(getattr(utt, "is_draft", False)),
+        )
 
     # ---------- #7 字幕设置 / 位置持久化 / #8 托盘 ----------
 
@@ -264,10 +297,21 @@ class CaptureTestWindow(QMainWindow):
     def _save_subtitle_pos(self, x: int, y: int) -> None:
         save_pref("subtitle_pos", f"{x},{y}")
 
+    def _on_draft_change(self, enabled: bool) -> None:
+        """「边说边出」开关即时生效：写偏好 + 转给正在跑的管道（不用重启）。"""
+        save_bool_pref(PREF_DRAFT_ENABLED, enabled)
+        if self._pipeline is not None:
+            self._pipeline.set_draft_enabled(enabled)
+
     def open_settings(self) -> None:
         self._ensure_subtitle()
         assert self._subtitle is not None
-        dlg = SubtitleSettingsDialog(self._subtitle, self)
+        dlg = SubtitleSettingsDialog(
+            self._subtitle,
+            self,
+            draft_enabled=load_bool_pref(PREF_DRAFT_ENABLED, DRAFT_DEFAULT_ENABLED),
+            on_draft_change=self._on_draft_change,
+        )
         dlg.exec()
         # 保存样式
         save_pref("subtitle_font", str(self._subtitle.font_size))

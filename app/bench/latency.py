@@ -24,7 +24,7 @@ import tempfile
 import time
 import wave
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +32,7 @@ import numpy as np
 from ..config.store import StoredConfig, load_config
 from ..pipeline.asr_pipeline import RecognitionPipeline
 from ..pipeline.recognizer import CloudRecognizer, Recognizer
-from ..pipeline.segmenter import SAMPLE_RATE, SegmenterConfig
+from ..pipeline.segmenter import SAMPLE_RATE, DraftConfig, SegmenterConfig
 from ..pipeline.trace import FakeClock, LatencyBreakdown, LatencyTracer
 from ..pipeline.translator import Translator
 from ..providers.openai_compatible import ModelConfig
@@ -49,6 +49,10 @@ LIVE_SENTENCES = (
 )
 
 
+#: 排队对比的容差：小于这个变化视为「没有恶化」（异步线程调度的正常抖动量级）
+_QUEUE_TOLERANCE_S = 0.05
+
+
 @dataclass(frozen=True)
 class DeterministicParams:
     """确定性基准的注入参数（耗时都是参数，不写死在断言里）。"""
@@ -57,6 +61,8 @@ class DeterministicParams:
     translator_s: float = 0.600
     ui_s: float = 0.020  # 假件「上屏回调」耗时
     speech_s: tuple[float, ...] = (1.5, 2.0, 2.5)  # 每句语音时长（句界已知）
+    # 传入 DraftConfig(enabled=True) 则同场景再跑一遍「边说边出」，并给出草稿提前量
+    draft: DraftConfig | None = None
 
 
 class ClockFakeRecognizer(Recognizer):
@@ -72,6 +78,11 @@ class ClockFakeRecognizer(Recognizer):
         self._clock.advance(self._cost)
         return True, f"recognized sentence {self._calls}"
 
+    @property
+    def calls(self) -> int:
+        """总共被调了几次（边说边出的成本可见性用这个数）。"""
+        return self._calls
+
 
 class ClockFakeTranslator:
     """假翻译器（FakeTranslator 同款思路）：按注入耗时拨动共享假时钟。"""
@@ -85,6 +96,11 @@ class ClockFakeTranslator:
         self._calls += 1
         self._clock.advance(self._cost)
         return True, f"译文第{self._calls}句"
+
+    @property
+    def calls(self) -> int:
+        """被调了几次（用来证明草稿没有偷偷送翻译）。"""
+        return self._calls
 
 
 def wait_until(
@@ -120,6 +136,32 @@ def silence_blocks(count: int) -> list[np.ndarray]:
     return [np.zeros(BLOCK_SAMPLES, dtype=np.float32) for _ in range(count)]
 
 
+def _fmt_num(value: float | None) -> str:
+    """延迟数字：没打点就写「无」，绝不用 0 冒充测量过。"""
+    return "无" if value is None else f"{value:.2f}s"
+
+
+def _fmt_detail(b: LatencyBreakdown) -> str:
+    """一句的「原文出现时刻」与「译文出现时刻」分开写（Issue #17 追加要求 1）。
+
+    原文 ≈2s 而译文 ≈5s 是两回事：产品达不达标要分开看，所以这里分开输出，
+    不再用一个 total 把两件事混在一起。开了边说边出时再补一行草稿证据。
+    """
+    lines = [
+        f"    原文出现在说完后 {_fmt_num(b.orig_total_s)}，译文出现在说完后 {_fmt_num(b.total_s)}"
+    ]
+    if b.draft_lead_s is not None:
+        if b.draft_total_s is not None and b.draft_total_s < 0:
+            when = f"说完前 {abs(b.draft_total_s):.2f}s（话还没说完就有字）"
+        else:
+            when = f"说完后 {b.draft_total_s:.2f}s（话已说完，仍比定稿早）"
+        lines.append(
+            f"    首条草稿出现在{when}，比定稿早 {b.draft_lead_s:.2f}s，"
+            f"本句补了 {b.draft_count} 次草稿"
+        )
+    return "\n".join(lines)
+
+
 def format_report(breakdowns: Sequence[LatencyBreakdown], header: Sequence[str]) -> str:
     """把分段延迟拼成人话报告；无有效句时明确说明而不是返回空。"""
     lines = list(header)
@@ -132,40 +174,78 @@ def format_report(breakdowns: Sequence[LatencyBreakdown], header: Sequence[str])
             f"（分段 {b.detect_s:.2f} / 排队 {b.queue_s:.2f} / 识别 {b.rec_s:.2f}"
             f" / 翻译 {b.trans_s:.2f} / 上屏 {b.shown_s:.2f}）"
         )
+        lines.append(_fmt_detail(b))
     totals = [b.total_s for b in breakdowns]
     lines.append(f"中位数 {statistics.median(totals):.2f}s，最大 {max(totals):.2f}s")
+    lines.extend(_fmt_summary_lines(breakdowns))
     return "\n".join(lines)
 
 
-def run_deterministic(params: DeterministicParams | None = None) -> str:
-    """确定性基准：真实管道 + 假时钟假件，逐句串行跑完并出报告（零真实等待）。"""
-    p = params or DeterministicParams()
+def _fmt_summary_lines(breakdowns: Sequence[LatencyBreakdown]) -> list[str]:
+    """汇总：原文/译文分开、排队单独一行（对比边说边出前后就看这一行）。"""
+    origs = [b.orig_total_s for b in breakdowns if b.orig_total_s is not None]
+    finals = [b.total_s for b in breakdowns]
+    queues = [b.queue_s for b in breakdowns]
+    out = []
+    if origs:
+        out.append(
+            f"原文出现：中位 {statistics.median(origs):.2f}s，最大 {max(origs):.2f}s"
+            f"｜译文出现：中位 {statistics.median(finals):.2f}s，最大 {max(finals):.2f}s"
+        )
+    out.append(f"排队：中位 {statistics.median(queues):.2f}s，最大 {max(queues):.2f}s")
+    return out
+
+
+def compare_queues(a: Sequence[LatencyBreakdown], b: Sequence[LatencyBreakdown]) -> str:
+    """两组结果的排队对比（Issue #17 追加要求 2：边说边出不得让排队恶化）。"""
+    if not a or not b:
+        return "排队对比：数据不足（有一组没跑完），不下结论"
+    am, bm = statistics.median([x.queue_s for x in a]), statistics.median([x.queue_s for x in b])
+    ax, bx = max(x.queue_s for x in a), max(x.queue_s for x in b)
+    delta = bx - ax
+    verdict = "没有恶化" if delta <= _QUEUE_TOLERANCE_S else "恶化了——需要处理"
+    return (
+        f"排队对比：关闭边说边出 中位 {am:.2f}s / 最大 {ax:.2f}s → "
+        f"开启边说边出 中位 {bm:.2f}s / 最大 {bx:.2f}s（最大变化 {delta:+.2f}s，{verdict}）"
+    )
+
+
+def _run_once(
+    p: DeterministicParams, draft: DraftConfig | None
+) -> tuple[list[LatencyBreakdown], int, int, int]:
+    """跑一遍场景，返回（分段结果, 整句识别调用, 翻译调用, 草稿识别调用）。
+
+    同步驱动（喂一块 → 处理一项）：草稿与定稿的先后完全由喂入顺序决定，
+    结果可复现、零真实等待，也避免线程抖动让基准数字跳。
+    """
     clock = FakeClock(0.0)
     tracer = LatencyTracer(clock.now)
     rec = ClockFakeRecognizer(clock, p.recognizer_s)
     trans = ClockFakeTranslator(clock, p.translator_s)
-    pipe = RecognitionPipeline(rec, trans, tracer=tracer)  # type: ignore[arg-type]
+    pipe = RecognitionPipeline(rec, trans, tracer=tracer, draft=draft)  # type: ignore[arg-type]
 
-    def display_hook(original: str, translation: str, _utt: object) -> None:
-        if translation:
-            clock.advance(p.ui_s)  # 模拟上屏回调耗时
+    def display_hook(original: str, translation: str, utt: object) -> None:
+        # 上屏是有代价的：译文上屏与草稿上屏都按注入的 ui_s 计时
+        if translation or getattr(utt, "is_draft", False):
+            clock.advance(p.ui_s)
 
     pipe.set_on_text(display_hook)
-    pipe.start()
-    try:
-        expected = 0
-        for speech_s in p.speech_s:
-            expected += 1
-            for block in tone_blocks(speech_s) + silence_blocks(SILENCE_BLOCKS):
-                clock.advance(BLOCK_S)  # 假时钟模拟实时喂音频
-                pipe.feed_block(block)
-            # 逐句串行：等这句打点走完再喂下一句，保证结果可复现
-            if not wait_until(_expect_completed(tracer, expected), timeout_s=20.0):
-                raise TimeoutError(f"第 {expected} 句未在限时内走完生命周期")
-    finally:
-        pipe.stop()
+    expected = 0
+    for speech_s in p.speech_s:
+        expected += 1
+        for block in tone_blocks(speech_s) + silence_blocks(SILENCE_BLOCKS):
+            clock.advance(BLOCK_S)  # 假时钟模拟实时喂音频
+            pipe.feed_block(block)
+            pipe.step()
+        while pipe.step():  # 这句处理完再喂下一句，保证可复现
+            pass
+        if tracer.completed_count() < expected:
+            raise TimeoutError(f"第 {expected} 句未走完生命周期")
+    return tracer.breakdowns(), rec.calls, trans.calls, pipe.draft_calls
 
-    header = [
+
+def _base_header(p: DeterministicParams) -> list[str]:
+    return [
         "=== live-caption 端到端延迟基准（确定性模式：不联网、不需要密钥）===",
         f"注入假耗时：识别 {p.recognizer_s:.2f}s / 翻译 {p.translator_s:.2f}s / 上屏 "
         f"{p.ui_s:.2f}s（都是参数，不是真实服务耗时）",
@@ -176,11 +256,53 @@ def run_deterministic(params: DeterministicParams | None = None) -> str:
         f"{'/'.join(f'{s:.1f}s' for s in p.speech_s)}），"
         f"句界 = {SILENCE_BLOCKS * BLOCK_S:.2f}s 静音",
     ]
-    report = format_report(tracer.breakdowns(), header)
+
+
+def run_deterministic(params: DeterministicParams | None = None) -> str:
+    """确定性基准：真实管道 + 假时钟假件，逐句串行跑完并出报告（零真实等待）。"""
+    p = params or DeterministicParams()
+    rows, _rec_calls, _trans_calls, _draft_calls = _run_once(p, p.draft)
+    header = list(_base_header(p))
+    if p.draft is not None and p.draft.enabled:
+        header.append(f"本行是「边说边出」结果：{p.draft}")
+    report = format_report(rows, header)
     return (
         report + "\n\n注：本报告只证明「延迟可拆分测量」，不代表 PRD「2 秒内」达标与否；"
         "达标判定要跑 make latency LIVE=1 接真实服务。"
     )
+
+
+def run_draft_compare(params: DeterministicParams | None = None) -> str:
+    """同一场景跑两遍（关/开边说边出）：证明草稿真的更早出现，且没把排队拖坏。
+
+    这是 Issue #17 验收 3 的数字证据；排队的真实前后对比仍以 LIVE 为准
+    （确定性模式逐句串行，排队本来就接近 0）。
+    """
+    p = params or DeterministicParams()
+    off_rows, off_rec, off_trans, off_draft = _run_once(p, None)
+    d = p.draft if p.draft is not None else DraftConfig(enabled=True)
+    on_rows, on_rec, on_trans, on_draft = _run_once(p, d)
+    lines = ["=== 边说边出对比（同一场景跑两遍：关闭 vs 开启）==="]
+    lines.append(f"草稿参数：{d}")
+    lines.append("关闭边说边出：")
+    lines.append(format_report(off_rows, ["（基线）"]))
+    lines.append("开启边说边出：")
+    lines.append(format_report(on_rows, ["（边说边出）"]))
+    leads = [r.draft_lead_s for r in on_rows if r.draft_lead_s is not None]
+    if leads:
+        lines.append(
+            f"草稿提前出现：中位 {statistics.median(leads):.2f}s，"
+            f"最小 {min(leads):.2f}s，最大 {max(leads):.2f}s（>0 才是真的更快）"
+        )
+    else:
+        lines.append("草稿提前出现：没有草稿上屏（边说边出没生效，需排查）")
+    lines.append(compare_queues(off_rows, on_rows))
+    lines.append(
+        f"识别调用：关闭 {off_rec} 次 → 开启 {on_rec} 次（其中草稿 {on_draft} 次）；"
+        f"翻译调用：关闭 {off_trans} 次 → 开启 {on_trans} 次（草稿不送翻译，应相等）"
+    )
+    lines.append("注：以上全部来自假件与虚拟时钟，不是产品真实延迟；真实排队看 LIVE。")
+    return "\n".join(lines)
 
 
 def _model_label(cfg: StoredConfig) -> str:
@@ -231,16 +353,64 @@ def run_live(
     tmp_dir: Path | None = None,
     timeout_s: float = 120.0,
     settle_s: float = 3.0,
+    draft: DraftConfig | None = None,
 ) -> tuple[int, str]:
     """真服务模式：真识别 + 真翻译 + 真实时钟。返回 (退出码, 报告文本)。"""
+    code, text, _rows = _run_live_once(
+        sentences, tmp_dir=tmp_dir, timeout_s=timeout_s, settle_s=settle_s, draft=draft
+    )
+    return code, text
+
+
+def run_live_compare(
+    sentences: Sequence[str] = LIVE_SENTENCES,
+    *,
+    tmp_dir: Path | None = None,
+    timeout_s: float = 120.0,
+    settle_s: float = 3.0,
+    draft: DraftConfig | None = None,
+) -> tuple[int, str]:
+    """真服务下跑两遍（关闭 vs 开启边说边出），给排队列前后对比（Issue #17 追加要求 2）。"""
+    d = draft or DraftConfig(enabled=True)
+    code_a, text_a, rows_a = _run_live_once(
+        sentences, tmp_dir=tmp_dir, timeout_s=timeout_s, settle_s=settle_s, draft=None
+    )
+    code_b, text_b, rows_b = _run_live_once(
+        sentences, tmp_dir=tmp_dir, timeout_s=timeout_s, settle_s=settle_s, draft=d
+    )
+    parts = [
+        "###### 真服务 · 关闭边说边出 ######",
+        text_a,
+        "",
+        "###### 真服务 · 开启边说边出 ######",
+        text_b,
+    ]
+    if rows_a and rows_b:
+        parts.extend(["", compare_queues(rows_a, rows_b)])
+    else:
+        parts.extend(["", "排队对比：有一组没跑完，不下结论（看上方提示排查后重跑）"])
+    code = code_a if code_a != 0 else code_b
+    return code, "\n".join(parts)
+
+
+def _run_live_once(
+    sentences: Sequence[str] = LIVE_SENTENCES,
+    *,
+    tmp_dir: Path | None = None,
+    timeout_s: float = 120.0,
+    settle_s: float = 3.0,
+    draft: DraftConfig | None = None,
+) -> tuple[int, str, list[LatencyBreakdown]]:
+    """真服务跑一遍：返回 (退出码, 报告文本, 分段结果)。"""
     asr_cfg, tr_cfg, hint = resolve_live_configs()
     if asr_cfg is None or tr_cfg is None:
-        return 2, f"无法跑真服务延迟基准：{hint}"
+        return 2, f"无法跑真服务延迟基准：{hint}", []
     if shutil.which("say") is None or shutil.which("afconvert") is None:
         return (
             2,
             "无法跑真服务延迟基准：本机没有 say/afconvert（合成语音输入需要 macOS 自带命令）。"
             f"当前平台：{sys.platform}",
+            [],
         )
 
     use_tmp = tmp_dir or Path(tempfile.mkdtemp(prefix="lc-latency-"))
@@ -250,7 +420,11 @@ def run_live(
         try:
             audio = generate_speech(text, use_tmp)
         except (subprocess.CalledProcessError, RuntimeError) as e:
-            return 2, f"合成语音失败：{e}\n（需要 macOS 自带 say/afconvert，且系统装有英文语音）"
+            return (
+                2,
+                f"合成语音失败：{e}\n（需要 macOS 自带 say/afconvert，且系统装有英文语音）",
+                [],
+            )
         blocks.extend(audio[i : i + BLOCK_SAMPLES] for i in range(0, len(audio), BLOCK_SAMPLES))
         gap = silence_blocks(round(0.6 / BLOCK_S))  # 句间停顿，保证断句边界
         blocks.extend(gap)
@@ -262,8 +436,8 @@ def run_live(
     translator = Translator(
         ModelConfig(base_url=tr_cfg.base_url, api_key=tr_cfg.api_key, model=tr_cfg.model)
     )
-    pipe = RecognitionPipeline(recognizer, translator, tracer=tracer)
-    pipe.set_on_text(lambda original, translation, _utt: None)
+    pipe = RecognitionPipeline(recognizer, translator, tracer=tracer, draft=draft)
+    pipe.set_on_text(lambda original, translation, utt: None)
     pipe.start()
     try:
         for block in blocks:
@@ -292,6 +466,7 @@ def run_live(
         "未包含：Qt 字幕窗实际绘制（本基准不进界面，终点=字幕回调返回）",
         "「说完」锚点=断句判定回退句尾静音确认，按音频实时到达计——捕获侧积压不计入",
         f"输入：say 合成英文语音 {len(sentences)} 句，按真实时间喂入",
+        f"边说边出：{'关闭' if draft is None or not draft.enabled else draft}",
     ]
     if timed_out:
         header.append(
@@ -304,8 +479,15 @@ def run_live(
             1,
             "\n".join(header) + "\n（一句字幕都没走完：识别可能失败或音频断句不成句，"
             "看软件日志排查后重跑）",
+            [],
         )
-    return 0, format_report(breakdowns, header)
+    cost = (
+        f"\n边说边出用量：草稿上屏 {pipe.draft_calls} 次，"
+        f"被丢弃草稿 {pipe.draft_dropped} 次（定稿优先/背压保护）"
+    )
+    if draft is None or not draft.enabled:
+        cost = "\n边说边出用量：关闭（无草稿调用）"
+    return 0, format_report(breakdowns, header) + cost, breakdowns
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -325,10 +507,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="1.5,2.0,2.5",
         help="确定性模式每句语音时长（秒，逗号分隔）",
     )
+    parser.add_argument(
+        "--draft",
+        action="store_true",
+        help="加跑一遍「边说边出」并给出草稿提前量与排队对比",
+    )
+    parser.add_argument("--draft-silence-ms", type=int, default=None, help="草稿停顿阈值（毫秒）")
+    parser.add_argument("--draft-max-s", type=float, default=None, help="草稿兜底时长（秒）")
     args = parser.parse_args(argv)
 
+    d = DraftConfig(enabled=True)
+    if args.draft_silence_ms is not None:
+        d = replace(d, silence_ms=args.draft_silence_ms)
+    if args.draft_max_s is not None:
+        d = replace(d, max_s=args.draft_max_s)
+
     if args.live:
-        code, text = run_live()
+        # 不带 --draft 时保持 Issue #16 的行为（不开草稿）；带上则同场景跑两遍给排队对比
+        if args.draft:
+            code, text = run_live_compare(draft=d)
+        else:
+            code, text = run_live()
     else:
         try:
             speech = tuple(float(s) for s in args.sentences.split(","))
@@ -340,15 +539,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"（{SegmenterConfig().min_utterance_s:g}s），收到「{args.sentences}」"
             )
             return 2
+        base = DeterministicParams(
+            recognizer_s=args.recognizer_ms / 1000.0,
+            translator_s=args.translator_ms / 1000.0,
+            ui_s=args.ui_ms / 1000.0,
+            speech_s=speech,
+        )
         try:
-            report = run_deterministic(
-                DeterministicParams(
-                    recognizer_s=args.recognizer_ms / 1000.0,
-                    translator_s=args.translator_ms / 1000.0,
-                    ui_s=args.ui_ms / 1000.0,
-                    speech_s=speech,
-                )
-            )
+            report = run_deterministic(base)
+            if args.draft:
+                # 同场景再跑一遍关闭 vs 开启：草稿提前量、排队对比、调用次数都在这段
+                report = report + "\n\n" + run_draft_compare(replace(base, draft=d))
         except TimeoutError as e:
             print(f"基准没跑完：{e}\n（管道或断句配置被改动？先跑 make check 看质量门）")
             return 1
