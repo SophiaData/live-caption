@@ -720,17 +720,50 @@ class TestDraftQueueProtection:
         assert pipe.draft_calls >= 2
 
     def test_draft_window_is_capped_in_pipeline(self) -> None:
-        """送出去的草稿音频不会超过 max_window_s：一次调用的占用有上界。"""
-        pipe, _clock, calls = self._make(0.05)
-        for block in tone_blocks(400):  # 连续说 4 秒（超过 max_utterance 会强制切分）
+        """每一条草稿调用的音频长度都必须 ≤ 上限；上限写死字面量，不许从生产默认值现读。
+
+        这条用例是 `max_window_s` 截断（第 4 轮 LIVE 抓到排队 +3.80s 恶化后加的保护）
+        的门神，所以要挡住三种漂移：
+        - 只断言「存在一条合规草稿」→ 多数草稿超限也照样绿；所以这里用 `all(...)`；
+        - 上限从 `DraftConfig()` 现读 → 默认值漂走判据跟着变宽；所以写死 1.5 秒的字面量；
+        - `calls` 混着定稿 → 可能被一条定稿满足；所以只统计回调里 `is_draft=True` 的那些。
+        """
+        cap_samples = 24000  # 字面量 = 1.5 秒 × 16000，故意不从 DraftConfig() 读
+        clock = FakeClock(0.0)
+        call_lens: list[int] = []
+        draft_flags: list[bool] = []
+
+        class RecordingRec(Recognizer):
+            """记录每次送进识别的音频长度；耗时按假时钟固定推进。"""
+
+            def transcribe(self, samples: np.ndarray, sample_rate: int = 16000):
+                call_lens.append(len(samples))
+                clock.advance(0.05)
+                return True, "txt"
+
+        pipe = RecognitionPipeline(
+            RecordingRec(), None, draft=DraftConfig(enabled=True), clock=clock.now
+        )
+        # 没配翻译器 → 一次识别调用恰好对应一次字幕回调，用回调的 is_draft 精确配对
+        pipe.set_on_text(lambda o, t, u: draft_flags.append(bool(u.is_draft)))
+        for block in tone_blocks(400):  # 连续说 4 秒：会触发多条草稿，也会强制切分定稿
             pipe.feed_block(block)
             pipe.step()
         while pipe.step():
             pass
-        draft_calls = [
-            c for c in calls if c <= int(DraftConfig().max_window_s * 16000) + BLOCK_SAMPLES
-        ]
-        assert draft_calls  # 草稿确实被限在窗口内
+
+        assert len(call_lens) == len(draft_flags)  # 配对成立，否则下面的区分不作数
+        draft_lens = [n for n, d in zip(call_lens, draft_flags, strict=True) if d]
+        final_lens = [n for n, d in zip(call_lens, draft_flags, strict=True) if not d]
+        assert draft_lens, "场景必须真的产生草稿调用，不然这条用例是空的"
+        assert final_lens, "场景必须真的产生定稿，用来证明草稿/定稿没被混为一谈"
+        assert all(n <= cap_samples for n in draft_lens), (
+            f"有草稿音频超过 1.5 秒上限（{max(draft_lens)} 样本）：一次草稿调用就能和定稿"
+            "一样贵，会把紧随的整句顶进排队——第 4 轮 LIVE 实测过的恶化就是这么来的"
+        )
+        assert pipe.draft_calls == len(draft_lens)
+        # 定稿可以更长（本例会到 3 秒），说明上面的「≤ 上限」不是靠挑短样本凑出来的
+        assert max(final_lens) > cap_samples
 
     def test_probe_learns_rate_then_gates(self) -> None:
         """没测过耗时前先放一条探针；学会比值之后才判断，不一上来就猜阈值。"""

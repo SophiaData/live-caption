@@ -1,11 +1,14 @@
 import os
 import sys
+import tempfile
+from pathlib import Path
 
 from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtWidgets import QApplication
 
-OUT = os.environ.get("LC_OUT", "/tmp/lcd")
-REPO = os.path.abspath(__file__).rsplit("/docs/", 1)[0]
+REPO_ROOT = Path(__file__).resolve().parents[4]  # tools → issue-17 → qa → docs → 仓库根
+OUT = os.environ.get("LC_OUT", tempfile.gettempdir())
+REPO = str(REPO_ROOT)
 app = QApplication(sys.argv)
 
 

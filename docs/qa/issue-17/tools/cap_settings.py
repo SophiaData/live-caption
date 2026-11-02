@@ -1,15 +1,19 @@
 """字幕设置面板真实捕获：勾选（默认开启）与取消勾选（关闭）两态。"""
 
+import os
 import sys
+import tempfile
+from pathlib import Path
 
 from PySide6.QtGui import QColor, QPainter, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-sys.path.insert(0, "/Users/gaotingkai/.dsh/state/superagent/work/draft-subtitles-a8f0014ff6ef")
+REPO_ROOT = Path(__file__).resolve().parents[4]  # tools → issue-17 → qa → docs → 仓库根
+sys.path.insert(0, str(REPO_ROOT))
 from app.ui.subtitle_settings import SubtitleSettingsDialog  # noqa: E402
 from app.ui.subtitle_window import SubtitleWindow  # noqa: E402
 
-OUT = __import__("os").environ.get("LC_OUT", "/tmp/lcd")
+OUT = os.environ.get("LC_OUT", tempfile.gettempdir())
 
 
 def title_font(a):
@@ -26,6 +30,7 @@ def sub_font(a):
     return f
 
 
+REPO_ROOT = Path(__file__).resolve().parents[4]  # tools → issue-17 → qa → docs → 仓库根
 app = QApplication(sys.argv)
 changes: list[bool] = []
 win = SubtitleWindow()

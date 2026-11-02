@@ -1,17 +1,21 @@
 """改动后（head 44f9d2d）真实捕获：跑真实管道 + 真实字幕窗，抓三种状态。"""
 
+import os
 import sys
+import tempfile
+from pathlib import Path
 
 import numpy as np
 from PySide6.QtGui import QColor, QPainter, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-sys.path.insert(0, __import__("os").path.abspath(__file__).rsplit("/docs/", 1)[0])
+REPO_ROOT = Path(__file__).resolve().parents[4]  # tools → issue-17 → qa → docs → 仓库根
+sys.path.insert(0, str(REPO_ROOT))
 from app.pipeline.asr_pipeline import RecognitionPipeline  # noqa: E402
 from app.pipeline.segmenter import DraftConfig  # noqa: E402
 from app.ui.subtitle_window import SubtitleWindow  # noqa: E402
 
-OUT = __import__("os").environ.get("LC_OUT", "/tmp/lcd")
+OUT = os.environ.get("LC_OUT", tempfile.gettempdir())
 
 
 def title_font(a):
@@ -28,6 +32,7 @@ def sub_font(a):
     return f
 
 
+REPO_ROOT = Path(__file__).resolve().parents[4]  # tools → issue-17 → qa → docs → 仓库根
 app = QApplication(sys.argv)
 SR, BLOCK = 16000, 160
 # 同一段输入：连续说 2.4s → 顿 0.2s → 再说 1.0s → 句尾静音 0.4s

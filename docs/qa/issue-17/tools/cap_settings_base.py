@@ -2,15 +2,27 @@
 
 import os
 import sys
+import tempfile
+
+
+def baseline_tree() -> str:
+    """基线代码树（git archive 7dc2042 解出来的目录）：必须用 LC_BASELINE_TREE 指定。"""
+    path = os.environ.get("LC_BASELINE_TREE", "")
+    if not path:
+        sys.exit(
+            "请先设 LC_BASELINE_TREE：git archive 7dc2042 | tar -x -C <目录>，再把该目录填进来"
+        )
+    return path
+
 
 from PySide6.QtGui import QColor, QPainter, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-sys.path.insert(0, os.environ.get("LC_BASELINE_TREE", "/tmp/lcd/baseline"))
+sys.path.insert(0, baseline_tree())
 from app.ui.subtitle_settings import SubtitleSettingsDialog  # noqa: E402
 from app.ui.subtitle_window import SubtitleWindow  # noqa: E402
 
-OUT = os.environ.get("LC_OUT", "/tmp/lcd")
+OUT = os.environ.get("LC_OUT", tempfile.gettempdir())
 app = QApplication(sys.argv)
 
 

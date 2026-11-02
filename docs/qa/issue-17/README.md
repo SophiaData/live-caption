@@ -11,12 +11,14 @@
 重新生成（在仓库根目录）：
 
 ```
-git archive 7dc2042 | tar -x -C /tmp/lcd/baseline   # 基线代码树
-LC_BASELINE_TREE=/tmp/lcd/baseline LC_OUT=/tmp/lcd QT_QPA_PLATFORM=offscreen python docs/qa/issue-17/tools/cap_base.py
-LC_BASELINE_TREE=/tmp/lcd/baseline LC_OUT=/tmp/lcd QT_QPA_PLATFORM=offscreen python docs/qa/issue-17/tools/cap_settings_base.py
-LC_OUT=/tmp/lcd QT_QPA_PLATFORM=offscreen python docs/qa/issue-17/tools/cap_head.py
-LC_OUT=/tmp/lcd QT_QPA_PLATFORM=offscreen python docs/qa/issue-17/tools/cap_settings.py
-LC_OUT=/tmp/lcd QT_QPA_PLATFORM=offscreen python docs/qa/issue-17/tools/cap_sheet.py
+WORK=$(mktemp -d)
+mkdir -p "$WORK/baseline" && git archive 7dc2042 | tar -x -C "$WORK/baseline"  # 基线代码树
+export LC_OUT="$WORK" LC_BASELINE_TREE="$WORK/baseline" QT_QPA_PLATFORM=offscreen
+for s in cap_base cap_settings_base cap_head cap_settings cap_sheet; do
+  python docs/qa/issue-17/tools/$s.py
+done
+# 脚本不写死任何机器目录：仓库根由 Path(__file__).parents[4] 推出，
+# 输出目录走 LC_OUT（默认系统临时目录），基线树必须走 LC_BASELINE_TREE（不设就报错退出）。
 ```
 
 `cap_head.py` 里跑的是真实 `RecognitionPipeline` + 真实断句器（假识别/假翻译只为让文字可控），
