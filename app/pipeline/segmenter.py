@@ -39,10 +39,16 @@ class Utterance:
     samples: np.ndarray
     start_s: float
     end_s: float
+    trailing_silence_s: float = 0.0  # 句尾用于确认「说完」的静音时长（延迟观测用，Issue #16）
 
     @property
     def duration_s(self) -> float:
         return self.end_s - self.start_s
+
+    @property
+    def speech_end_s(self) -> float:
+        """真正「说完」的时刻（end_s 去掉尾部静音确认）。"""
+        return max(self.end_s - self.trailing_silence_s, self.start_s)
 
 
 class Segmenter:
@@ -107,12 +113,20 @@ class Segmenter:
         # 所以 end = (total_seen + 本块样本) / SAMPLE_RATE
         end_s = (self._total_samples_seen + len(self._blocks[-1])) / SAMPLE_RATE
         start_s = end_s - duration
+        trailing_silence_s = self._silence_samples / SAMPLE_RATE  # 打点须在复位前取
         self._blocks = []
         self._cur_samples = 0
         self._in_speech = False
         self._silence_samples = 0
         if duration >= self._cfg.min_utterance_s:
-            self._completed.append(Utterance(samples=samples, start_s=start_s, end_s=end_s))
+            self._completed.append(
+                Utterance(
+                    samples=samples,
+                    start_s=start_s,
+                    end_s=end_s,
+                    trailing_silence_s=trailing_silence_s,
+                )
+            )
         # 太短（咳嗽等）静默丢弃
 
     def flush(self) -> list[Utterance]:
