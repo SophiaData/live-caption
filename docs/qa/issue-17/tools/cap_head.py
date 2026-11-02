@@ -3,7 +3,7 @@
 import sys
 
 import numpy as np
-from PySide6.QtGui import QColor, QFont, QPainter, QPixmap  # noqa: E402
+from PySide6.QtGui import QColor, QPainter, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 sys.path.insert(0, __import__("os").path.abspath(__file__).rsplit("/docs/", 1)[0])
@@ -12,6 +12,22 @@ from app.pipeline.segmenter import DraftConfig  # noqa: E402
 from app.ui.subtitle_window import SubtitleWindow  # noqa: E402
 
 OUT = __import__("os").environ.get("LC_OUT", "/tmp/lcd")
+
+
+def title_font(a):
+    """用应用默认字体（offscreen 下写死字体名会变豆腐块）。"""
+    f = a.font()
+    f.setPointSize(14)
+    f.setBold(True)
+    return f
+
+
+def sub_font(a):
+    f = a.font()
+    f.setPointSize(11)
+    return f
+
+
 app = QApplication(sys.argv)
 SR, BLOCK = 16000, 160
 # 同一段输入：连续说 2.4s → 顿 0.2s → 再说 1.0s → 句尾静音 0.4s
@@ -42,9 +58,9 @@ def panel(shot, title, sub, path):
     p.fill(QColor("#101317"))
     g = QPainter(p)
     g.setPen(QColor("#e6e6e6"))
-    g.setFont(QFont("PingFang SC", 15, QFont.Weight.Bold))
+    g.setFont(title_font(app))
     g.drawText(16, 30, title)
-    g.setFont(QFont("PingFang SC", 12))
+    g.setFont(sub_font(app))
     g.setPen(QColor("#8b949e"))
     g.drawText(16, 58, sub)
     g.drawPixmap(20, 72, shot)
@@ -81,7 +97,7 @@ on = drive(True, {180})
 g = on[180][0]
 panel(
     g,
-    "② 改动后 · 开关开启 · 人还在说话（第 1.8 秒）",
+    "②a 改动后 · 开关开启 · 人还在说话（第 1.8 秒）",
     f"真实管道产出草稿回调：先出现暗色草稿，边说边补（此句草稿调用 {on[180][1]} 次）",
     f"{OUT}/p_head_draft.png",
 )
@@ -89,7 +105,7 @@ panel(
 f = on[-1][0]
 panel(
     f,
-    "③ 改动后 · 开关开启 · 句子说完",
+    "②b 改动后 · 开关开启 · 句子说完：同一行原地变完整 + 译文",
     f"同一行被整句结果原地替换 + 补译文；窗口内字幕条数恒为 {on[-1][3]}（没有第二条）",
     f"{OUT}/p_head_final.png",
 )
@@ -97,7 +113,7 @@ panel(
 off = drive(False, {180})
 panel(
     off[180][0],
-    "① 改动后 · 开关关闭 · 人还在说话（第 1.8 秒）",
+    "①a 改动后 · 开关关闭 · 人还在说话（第 1.8 秒）",
     f"关掉后与今天一致：草稿调用 {off[-1][1]} 次、识别总共只调了定稿那一次",
     f"{OUT}/p_head_off.png",
 )

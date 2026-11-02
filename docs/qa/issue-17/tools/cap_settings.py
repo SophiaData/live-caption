@@ -2,12 +2,29 @@
 
 import sys
 
-from PySide6.QtGui import QColor, QFont, QPainter, QPixmap  # noqa: E402
+from PySide6.QtGui import QColor, QPainter, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 sys.path.insert(0, "/Users/gaotingkai/.dsh/state/superagent/work/draft-subtitles-a8f0014ff6ef")
 from app.ui.subtitle_settings import SubtitleSettingsDialog  # noqa: E402
 from app.ui.subtitle_window import SubtitleWindow  # noqa: E402
+
+OUT = __import__("os").environ.get("LC_OUT", "/tmp/lcd")
+
+
+def title_font(a):
+    """用应用默认字体（offscreen 下写死字体名会变豆腐块）。"""
+    f = a.font()
+    f.setPointSize(14)
+    f.setBold(True)
+    return f
+
+
+def sub_font(a):
+    f = a.font()
+    f.setPointSize(11)
+    return f
+
 
 app = QApplication(sys.argv)
 changes: list[bool] = []
@@ -15,8 +32,8 @@ win = SubtitleWindow()
 win.resize(960, 170)
 
 for checked, title, path in (
-    (True, "⑤ 字幕设置面板 · 改动后 head 44f9d2d（默认勾选 = 开启）", "/tmp/lcd/p_set_on.png"),
-    (False, "⑥ 字幕设置面板 · 改动后 head 44f9d2d（取消勾选 = 关闭）", "/tmp/lcd/p_set_off.png"),
+    (True, "⑤ 字幕设置面板 · 改动后 head 44f9d2d（默认勾选 = 开启）", f"{OUT}/p_set_on.png"),
+    (False, "⑥ 字幕设置面板 · 改动后 head 44f9d2d（取消勾选 = 关闭）", f"{OUT}/p_set_off.png"),
 ):
     dlg = SubtitleSettingsDialog(
         win, draft_enabled=checked, on_draft_change=lambda v: changes.append(v)
@@ -29,9 +46,9 @@ for checked, title, path in (
     p.fill(QColor("#101317"))
     g = QPainter(p)
     g.setPen(QColor("#e6e6e6"))
-    g.setFont(QFont("PingFang SC", 15, QFont.Weight.Bold))
+    g.setFont(title_font(app))
     g.drawText(12, 30, title)
-    g.setFont(QFont("PingFang SC", 12))
+    g.setFont(sub_font(app))
     g.setPen(QColor("#8b949e"))
     g.drawText(12, 58, f"真实控件截图 · 勾选状态 = {dlg._draft_check.isChecked()}")
     g.drawPixmap(12, 72, shot)

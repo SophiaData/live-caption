@@ -35,6 +35,6 @@ sub = [
 w = max(QImage(p).width() for p in sub)
 stack(sub, f"{REPO}/docs/qa/issue-17/compare_subtitles_v2.png", w)
 
-sets = [f"{OUT}/before_settings.png", f"{OUT}/p_set_on.png", f"{OUT}/p_set_off.png"]
+sets = [f"{OUT}/p_set_base.png", f"{OUT}/p_set_on.png", f"{OUT}/p_set_off.png"]
 w2 = max(QImage(p).width() for p in sets)
 stack(sets, f"{REPO}/docs/qa/issue-17/compare_settings_v2.png", w2)
