@@ -1,5 +1,5 @@
 # 质量门：format + lint + 类型检查 + 测试，一条命令全跑
-.PHONY: setup check coverage run
+.PHONY: setup check coverage run latency latency-live
 
 PYTHON ?= python3.12
 
@@ -21,3 +21,18 @@ coverage:
 
 run:
 	.venv/bin/python -m app.main
+
+# 端到端字幕延迟分阶段报告（Issue #16）：确定性假件基准，不联网、不需要密钥
+# 假件耗时与句长可参数注入，例如：make latency TR_MS=1200 SENTENCES=1.5,2.0
+# 真服务模式（需先在配置向导配好识别+翻译服务）：make latency LIVE=1 或 make latency-live
+REC_MS ?= 400
+TR_MS ?= 600
+UI_MS ?= 20
+SENTENCES ?= 1.5,2.0,2.5
+
+latency:
+	.venv/bin/python -m app.bench.latency --recognizer-ms $(REC_MS) --translator-ms $(TR_MS) \
+		--ui-ms $(UI_MS) --sentences $(SENTENCES) $(if $(filter 1,$(LIVE)),--live,)
+
+latency-live:
+	.venv/bin/python -m app.bench.latency --live

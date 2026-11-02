@@ -17,6 +17,7 @@ import numpy as np
 
 from .recognizer import Recognizer
 from .segmenter import Segmenter, Utterance
+from .trace import LatencyTracer
 from .translator import Translator
 
 logger = logging.getLogger(__name__)
@@ -31,11 +32,20 @@ class RecognitionPipeline:
         pipe.start()
         pipe.feed_block(audio_block)  # 从捕获回调调用
         pipe.stop()
+
+    观测（Issue #16）：可选传入 tracer=LatencyTracer()，管道只在生命周期
+    节点记时钟读数（纯内存、非阻塞），不传则一行都不执行，行为不变。
     """
 
-    def __init__(self, recognizer: Recognizer, translator: Translator | None = None) -> None:
+    def __init__(
+        self,
+        recognizer: Recognizer,
+        translator: Translator | None = None,
+        tracer: LatencyTracer | None = None,
+    ) -> None:
         self._recognizer = recognizer
         self._translator = translator
+        self._tracer = tracer
         self._segmenter = Segmenter()
         self._on_text: Callable[[str, str, Utterance], None] | None = None
         self._queue: list[Utterance] = []
@@ -87,6 +97,8 @@ class RecognitionPipeline:
                 logger.warning("识别队列已满，丢弃一句（背压）")
                 return
             self._queue.append(utt)
+        if self._tracer is not None:
+            self._tracer.mark("split", utt)
 
     def _work_loop(self) -> None:
         while self._running:
@@ -99,7 +111,11 @@ class RecognitionPipeline:
 
                 time.sleep(0.05)  # 空转小睡，避免忙等
                 continue
+            if self._tracer is not None:
+                self._tracer.mark("rec_start", utt)
             ok, result = self._recognizer.transcribe(utt.samples, 16000)
+            if self._tracer is not None:
+                self._tracer.mark("rec_end", utt)
             if not ok:
                 logger.warning("识别失败: %s", result)
                 continue
@@ -112,8 +128,14 @@ class RecognitionPipeline:
                     self._on_text(result, "", utt)
                 except Exception:  # noqa: BLE001
                     logger.exception("字幕回调异常")
+            if self._tracer is not None:
+                self._tracer.mark("orig_shown", utt)
             if self._translator is not None:
+                if self._tracer is not None:
+                    self._tracer.mark("tr_start", utt)
                 tok, translated = self._translator.translate(result)
+                if self._tracer is not None:
+                    self._tracer.mark("tr_end", utt)
                 if tok and translated:
                     if self._on_text is not None:
                         try:
@@ -122,3 +144,6 @@ class RecognitionPipeline:
                             logger.exception("字幕回调异常")
                 else:
                     logger.warning("翻译失败（保留原文显示）: %s", translated)
+            if self._tracer is not None:
+                # 「上屏」终点 = 这句最后一次字幕回调执行完毕（交给显示层）
+                self._tracer.mark("shown", utt)
