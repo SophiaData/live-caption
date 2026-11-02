@@ -125,7 +125,7 @@ class SCKSession:
         )
         config = sck.SCStreamConfiguration.alloc().init()
         config.setCapturesAudio_(True)
-        config.setExcludesCurrentProcessAudio_(False)  # 不排除本进程（确保能收到所有系统声音）
+        config.setExcludesCurrentProcessAudio_(True)  # 不抓自己（TD-7 裁决，Issue #14）
         config.setSampleRate_(TARGET_SAMPLE_RATE)
         config.setQueueDepth_(3)  # 低延迟
 

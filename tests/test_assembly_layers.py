@@ -305,9 +305,9 @@ def test_sck_session_start_stop_uses_injected_modules(monkeypatch: pytest.Monkey
     config = FakeSCKConfiguration.instance
     assert config is not None
     # 契约值写死（不引用常量，否则常量被改坏时这里是恒等式）：
-    # 抓系统声音、不排本进程（见 TD-7）、给 SCK 请求 16k、queueDepth=3 保低延迟
+    # 抓系统声音、排除本进程声音（TD-7 裁决，Issue #14）、请求 16k、queueDepth=3 保低延迟
     assert config.captures_audio is True
-    assert config.excludes_audio is False  # TD-7：与 sck_session.py 顶部注释相反，待老板裁决
+    assert config.excludes_audio is True  # TD-7 已清账；另有专测钉「生产确实传了 True」
     assert config.sample_rate == 16000
     assert config.queue_depth == 3
     stream = FakeSCKStream.instances[-1]
@@ -316,6 +316,34 @@ def test_sck_session_start_stop_uses_injected_modules(monkeypatch: pytest.Monkey
     session.stop()
     assert session._stream is None
     assert stream.stopped
+
+
+def test_sck_session_start_excludes_current_process_audio(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TD-7 裁决（Issue #14）：钉「生产确实传了 True」，不是常量间恒等式。
+
+    用独立记录器只盯 setExcludesCurrentProcessAudio_ 的实参：把 sck_session.py 里的
+    True 改回 False、删掉这行调用、或改成重复调用，本用例都会变红。
+    """
+    calls: list[bool] = []
+
+    class RecordingConfig(FakeSCKConfiguration):
+        def setExcludesCurrentProcessAudio_(self, value: bool) -> None:
+            calls.append(value)
+
+    mods = fake_sck_modules()
+    mods["sck"] = SimpleNamespace(
+        SCShareableContent=FakeShareableContent,
+        SCContentFilter=FakeFilter,
+        SCStreamConfiguration=RecordingConfig,
+        SCStream=FakeSCKStreamFactory,
+    )
+    monkeypatch.setattr(sck_session, "_sck_modules", lambda: mods)
+    monkeypatch.setattr(sck_session, "_make_delegate_class", lambda: FakeDelegate)
+    session = sck_session.SCKSession(lambda block, level: None)
+
+    session.start()
+    assert calls == [True]  # 恰好一次调用，且实参为 True
+    session.stop()
 
 
 def test_sck_session_content_error_is_user_facing(monkeypatch: pytest.MonkeyPatch) -> None:
