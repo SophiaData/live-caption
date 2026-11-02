@@ -281,6 +281,7 @@ def run_draft_compare(params: DeterministicParams | None = None) -> str:
     p = params or DeterministicParams()
     off_rows, off_rec, off_trans, off_draft = _run_once(p, None)
     d = p.draft if p.draft is not None else DraftConfig(enabled=True)
+    seg = SegmenterConfig()  # 提前量要按断句器真实阈值算，不另写一份
     on_rows, on_rec, on_trans, on_draft = _run_once(p, d)
     lines = ["=== 边说边出对比（同一场景跑两遍：关闭 vs 开启）==="]
     lines.append(f"草稿参数：{d}")
@@ -302,6 +303,13 @@ def run_draft_compare(params: DeterministicParams | None = None) -> str:
         f"翻译调用：关闭 {off_trans} 次 → 开启 {on_trans} 次（草稿不送翻译，应相等）"
     )
     lines.append("注：以上全部来自假件与虚拟时钟，不是产品真实延迟；真实排队看 LIVE。")
+    lead_ms = max(0, seg.min_silence_ms - d.silence_ms)
+    lines.append(
+        f"两种草稿触发的差别：句内停顿触发的草稿只比整句判定早 {lead_ms / 1000:.2f}s"
+        "（= 整句静音阈值 − 草稿静音阈值），真服务识别耗时若大于这个提前量，草稿就会落在"
+        "「说完后」——仍早于定稿，但不是话没说完就有字；连续说话时的「说完前」靠兜底时长"
+        f"（当前 {d.max_s:.2f}s）触发，参数见 --draft-silence-ms / --draft-max-s。"
+    )
     return "\n".join(lines)
 
 

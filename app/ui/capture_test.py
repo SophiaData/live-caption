@@ -7,6 +7,7 @@ Mac 首选项「系统声音（免驱动）」走 ScreenCaptureKit；其余走 s
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -36,11 +37,13 @@ from ..config.store import (
 )
 from ..pipeline.asr_pipeline import RecognitionPipeline
 from ..pipeline.recognizer import CloudRecognizer, Recognizer
-from ..pipeline.segmenter import DraftConfig
+from ..pipeline.segmenter import DraftConfig, SegmenterConfig
 from ..pipeline.translator import Translator
 from ..providers.openai_compatible import ModelConfig
 from .subtitle_settings import SubtitleSettingsDialog
 from .subtitle_window import SubtitleWindow
+
+logger = logging.getLogger(__name__)
 
 SCK_ENTRY = "系统声音（免驱动 · macOS 13+）"
 LOCAL_ASR_ENTRY = "本地识别（faster-whisper，免注册）"
@@ -50,15 +53,36 @@ PREF_DRAFT_ENABLED = "draft_enabled"
 PREF_DRAFT_SILENCE_MS = "draft_silence_ms"
 PREF_DRAFT_MAX_MS = "draft_max_ms"
 DRAFT_DEFAULT_ENABLED = True
+DRAFT_MIN_SILENCE_MS = 20  # 再短就成了「每块都送识别」，纯烧配额
 
 
 def draft_from_prefs() -> DraftConfig:
-    """从偏好构造草稿参数；没配过的项用 DraftConfig 的默认值。"""
+    """从偏好构造草稿参数；没配过的项用 DraftConfig 的默认值。
+
+    必须校验：偏好里的数字可能被人手改坏。静音阈值若 >= 整句判定阈值，停顿触发
+    永远不会发生（草稿只剩兜底那一条）；过小则每个音频块都想吐。越界就夹回可用
+    区间，并把夹过的痕迹留在日志里——不能让设置面板骗人。
+    """
     base = DraftConfig()
+    seg = SegmenterConfig()  # 阈值上限跟着断句器实际用的值走，不另写一份
+    silence_ms = load_int_pref(PREF_DRAFT_SILENCE_MS, base.silence_ms)
+    max_ms = load_int_pref(PREF_DRAFT_MAX_MS, int(round(base.max_s * 1000)))
+    hi_silence = max(DRAFT_MIN_SILENCE_MS + 10, seg.min_silence_ms - 10)
+    clamped_silence = min(max(silence_ms, DRAFT_MIN_SILENCE_MS), hi_silence)
+    clamped_max = min(max(max_ms / 1000.0, base.min_s + 0.1), float(seg.max_utterance_s))
+    if clamped_silence != silence_ms or abs(clamped_max - max_ms / 1000.0) > 1e-9:
+        logger.warning(
+            "边说边出参数越界已夹回可用区间：停顿 %sms→%sms（整句判定 %sms），兜底 %.3fs→%.3fs",
+            silence_ms,
+            clamped_silence,
+            seg.min_silence_ms,
+            max_ms / 1000.0,
+            clamped_max,
+        )
     return DraftConfig(
         enabled=load_bool_pref(PREF_DRAFT_ENABLED, DRAFT_DEFAULT_ENABLED),
-        silence_ms=load_int_pref(PREF_DRAFT_SILENCE_MS, base.silence_ms),
-        max_s=load_int_pref(PREF_DRAFT_MAX_MS, int(round(base.max_s * 1000))) / 1000.0,
+        silence_ms=clamped_silence,
+        max_s=clamped_max,
     )
 
 

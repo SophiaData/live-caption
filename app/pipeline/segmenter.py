@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 
 import numpy as np
@@ -98,6 +99,7 @@ class Segmenter:
         self._cfg = config or SegmenterConfig()
         self._draft: DraftConfig = draft or DraftConfig()
         self._draft_on: bool = self._draft.enabled  # 运行时开关（设置面板可即时切换）
+        self._draft_lock = threading.Lock()  # 护住开关与待取草稿：音频线程 vs UI 线程
         self._blocks: list[np.ndarray] = []  # 当前句的块
         self._cur_samples: int = 0  # 当前句累计样本数
         self._total_samples_seen = 0  # 全局累计样本数（算时间用）
@@ -122,14 +124,24 @@ class Segmenter:
 
     @property
     def draft_enabled(self) -> bool:
-        """当前是否产出草稿片段（配置与运行时开关的与）。"""
-        return self._draft.enabled and self._draft_on
+        """当前是否产出草稿片段：运行时开关是唯一真相。
+
+        配置里的 `DraftConfig.enabled` 只是初值（引擎默认关、产品默认开）。若这里
+        还跟初值相与，就会出现「先关着启动、之后在设置里勾上，引擎却永远不出草稿」
+        的哑开关——设置面板骗人。
+        """
+        with self._draft_lock:
+            return self._draft_on
 
     def set_draft_enabled(self, on: bool) -> None:
-        """设置面板即时切换「边说边出」；关闭时清掉未取走的草稿，避免旧片段上屏。"""
-        self._draft_on = on
-        if not on:
-            self._drafts = []
+        """设置面板即时切换「边说边出」；关闭时清掉未取走的草稿，避免旧片段上屏。
+
+        音频线程可能正在 feed()：草稿状态与开关用同一把锁护住，跨线程切换不撕裂。
+        """
+        with self._draft_lock:
+            self._draft_on = on
+            if not on:
+                self._drafts = []
 
     def feed(self, block: np.ndarray) -> None:
         """喂入一块 float32 单声道音频（大小任意，按样本数算时长）。"""
@@ -172,15 +184,17 @@ class Segmenter:
 
     def pop_drafts(self) -> list[Utterance]:
         """取出待显示的草稿片段（返回后清空；关闭草稿时恒为空）。"""
-        result = self._drafts
-        self._drafts = []
+        with self._draft_lock:
+            result = self._drafts
+            self._drafts = []
         return result
 
     def flush(self) -> list[Utterance]:
         """流结束时强制切出当前句（若正在说话且够长），并取出全部完成句。"""
         if self._in_speech and self._blocks:
             self._finalize_utterance()
-        self._drafts = []  # 流末未定稿的草稿不再有意义
+        with self._draft_lock:
+            self._drafts = []  # 流末未定稿的草稿不再有意义
         return self.pop_utterances()
 
     # ---------- 内部 ----------
@@ -211,7 +225,9 @@ class Segmenter:
             self._draft_silence_fired = True
         self._draft_count += 1
         self._last_draft_s = cur_s
-        self._drafts.append(self._snapshot_draft(cur_s))
+        draft = self._snapshot_draft(cur_s)
+        with self._draft_lock:  # 与 set_draft_enabled(False) 抢同一把锁，不塞回已清的列表
+            self._drafts.append(draft)
 
     def _snapshot_draft(self, cur_s: float) -> Utterance:
         """把当前句已缓冲的采样复制成一条草稿片段。"""
@@ -251,5 +267,6 @@ class Segmenter:
                     utt_id=utt_id,
                 )
             )
-            self._drafts = [d for d in self._drafts if d.utt_id != utt_id]  # 定稿已就位
+            with self._draft_lock:  # 定稿已就位：同句未取走的草稿作废
+                self._drafts = [d for d in self._drafts if d.utt_id != utt_id]
         # 太短（咳嗽等）静默丢弃

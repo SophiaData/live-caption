@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pytest
 
@@ -201,6 +203,109 @@ class TestPipelineDraft:
         draft_texts = [o for o, _t, _u, d in s_on if d]
         assert draft_texts  # 确实出过草稿
         assert all(dt not in trans_on.calls for dt in draft_texts)
+
+    def test_off_state_identical_to_before(self) -> None:
+        """开关关闭：草稿调用 0 次，识别只调一次（与今天一致）。"""
+        shown, rec, trans, draft_calls, dropped = run_scenario(draft=None)
+        assert (draft_calls, dropped) == (0, 0)
+        assert len(rec.calls) == 1
+        assert [d for _o, _t, _u, d in shown] == [False, False]
+        assert trans.calls == [shown[0][0]]
+
+    def test_runtime_switch_off_stops_drafts(self) -> None:
+        """运行中关掉开关：立刻不再产出草稿（设置面板即时生效）。"""
+        rec = CountingRecognizer()
+        pipe = RecognitionPipeline(rec, RecordingTranslator(), draft=DraftConfig(enabled=True))
+        pipe.set_draft_enabled(False)
+        shown: list[tuple[str, str, int, bool]] = []
+        pipe.set_on_text(lambda o, t, u: shown.append((o, t, u.utt_id, u.is_draft)))
+        for block in tone_blocks(200) + silence_blocks(35):
+            pipe.feed_block(block)
+            pipe.step()
+        while pipe.step():
+            pass
+        assert pipe.draft_calls == 0
+        assert all(not d for _o, _t, _u, d in shown)
+        assert len(rec.calls) == 1
+
+    def test_final_never_waits_behind_draft(self) -> None:
+        """整句队列有积压时草稿一律不入队——定稿的排队不会被草稿拖坏。"""
+        rec = CountingRecognizer()
+        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=True))
+        # 第一句喂完但不 step：定稿堆在队列里，制造「有积压」的真实状态
+        for block in tone_blocks(200) + silence_blocks(35):
+            pipe.feed_block(block)
+        assert len(rec.calls) == 0  # 没 step：什么都还没送识别
+        # 第二句边说边出的草稿必须全被挡下（只记公开计数，不碰内部队列）
+        for block in tone_blocks(200):
+            pipe.feed_block(block)
+        assert pipe.draft_calls == 0
+        assert pipe.draft_dropped > 0
+
+    def test_runtime_switch_on_starts_drafts(self) -> None:
+        """先关着启动、之后在设置里打开：必须真的开始出草稿，不能是哑开关。"""
+        rec = CountingRecognizer()
+        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=False))
+        shown: list[tuple[str, str, int, bool]] = []
+        pipe.set_on_text(lambda o, t, u: shown.append((o, t, u.utt_id, u.is_draft)))
+        assert pipe.draft_enabled is False
+        pipe.set_draft_enabled(True)
+        assert pipe.draft_enabled is True
+        for block in tone_blocks(200) + silence_blocks(35):
+            pipe.feed_block(block)
+            pipe.step()
+        while pipe.step():
+            pass
+        assert pipe.draft_calls > 0
+        assert any(d for _o, _t, _u, d in shown)
+        assert not any(d for _o, t, _u, d in shown if t)  # 草稿仍然一条都没送翻译
+
+    def test_draft_cannot_render_after_switch_off_midflight(self) -> None:
+        """开关关掉时正好有一条草稿在识别：那条草稿不许再上屏（认完也不许）。"""
+
+        class SwitchOffInside(CountingRecognizer):
+            """第一次送识别的必然是草稿（草稿先入队）：识别中途把开关关掉。"""
+
+            def transcribe(self, samples: np.ndarray, sample_rate: int = 16000):
+                if not self.calls:
+                    self._pipe.set_draft_enabled(False)  # type: ignore[attr-defined]
+                return super().transcribe(samples, sample_rate)
+
+        rec = SwitchOffInside()
+        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=True))
+        rec._pipe = pipe  # type: ignore[attr-defined]
+        shown: list[tuple[str, str, int, bool]] = []
+        pipe.set_on_text(lambda o, t, u: shown.append((o, t, u.utt_id, u.is_draft)))
+        for block in tone_blocks(200) + silence_blocks(35):
+            pipe.feed_block(block)
+            pipe.step()
+        while pipe.step():
+            pass
+        assert pipe.draft_calls == 0  # 一次都没上屏
+        assert pipe.draft_dropped >= 1
+        assert [d for _o, _t, _u, d in shown] == [False]  # 只有定稿那次（没配翻译器）
+
+    def test_stale_draft_cannot_outrank_final(self) -> None:
+        """定稿已上屏后，迟到的同句草稿必须作废（不能盖掉定稿）。"""
+        pipe = RecognitionPipeline(CountingRecognizer(), None, draft=DraftConfig(enabled=True))
+        shown: list[tuple[str, str, int, bool]] = []
+        pipe.set_on_text(lambda o, t, u: shown.append((o, t, u.utt_id, u.is_draft)))
+        pipe._enqueue(
+            Utterance(samples=np.zeros(3200, dtype=np.float32), start_s=0.0, end_s=0.2, utt_id=7)
+        )
+        assert pipe.step()
+        pipe._enqueue_draft(
+            Utterance(
+                samples=np.zeros(1600, dtype=np.float32),
+                start_s=0.0,
+                end_s=0.1,
+                utt_id=7,
+                is_draft=True,
+            )
+        )
+        assert pipe.step() is False
+        assert [d for _o, _t, _u, d in shown] == [False]
+        assert pipe.draft_dropped >= 1
 
 
 class TestWindowSameLine:
@@ -443,13 +548,16 @@ class TestLatencyReportEvidence:
         assert called == ["compare", "single"]
 
     def test_cli_draft_params_plumb_through(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """草稿窗口参数走命令行，不写死：调大兜底时长 → 草稿条数减少。"""
+        """草稿窗口参数走命令行，不写死：兜底时长越短，同一句话补的草稿越多。"""
         assert bench.main(["--draft", "--sentences", "2.5", "--draft-max-s", "0.5"]) == 0
         many = capsys.readouterr().out
         assert bench.main(["--draft", "--sentences", "2.5", "--draft-max-s", "3.0"]) == 0
         few = capsys.readouterr().out
-        assert "本句补了 3 次草稿" in many
-        assert "本句补了 3 次草稿" not in few
+
+        def draft_total(text: str) -> int:
+            return sum(int(x) for x in re.findall(r"本句补了 (\d+) 次草稿", text))
+
+        assert draft_total(many) > draft_total(few) > 0
 
 
 class TestSettingsToggle:
@@ -517,61 +625,22 @@ class TestDraftPrefs:
         assert cfg.enabled is False
         assert (cfg.silence_ms, cfg.max_s) == (90, 2.0)
 
-    def test_off_state_identical_to_before(self) -> None:
-        """开关关闭：草稿调用 0 次，识别只调一次（与今天一致）。"""
-        shown, rec, trans, draft_calls, dropped = run_scenario(draft=None)
-        assert (draft_calls, dropped) == (0, 0)
-        assert len(rec.calls) == 1
-        assert [d for _o, _t, _u, d in shown] == [False, False]
-        assert trans.calls == [shown[0][0]]
+    def test_out_of_range_prefs_get_clamped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """手改坏的偏好不能让功能变哑：阈值不低于整句判定值时必须夹回来。"""
+        from app.pipeline.segmenter import SegmenterConfig
 
-    def test_runtime_switch_off_stops_drafts(self) -> None:
-        """运行中关掉开关：立刻不再产出草稿（设置面板即时生效）。"""
-        rec = CountingRecognizer()
-        pipe = RecognitionPipeline(rec, RecordingTranslator(), draft=DraftConfig(enabled=True))
-        pipe.set_draft_enabled(False)
-        shown: list[tuple[str, str, int, bool]] = []
-        pipe.set_on_text(lambda o, t, u: shown.append((o, t, u.utt_id, u.is_draft)))
-        for block in tone_blocks(200) + silence_blocks(35):
-            pipe.feed_block(block)
-            pipe.step()
-        while pipe.step():
-            pass
-        assert pipe.draft_calls == 0
-        assert all(not d for _o, _t, _u, d in shown)
-        assert len(rec.calls) == 1
+        cfg_def = SegmenterConfig()
+        from app.ui import capture_test as ct
 
-    def test_final_never_waits_behind_draft(self) -> None:
-        """整句队列有积压时草稿不入队——定稿的排队不会被草稿拖坏。"""
-        pipe = RecognitionPipeline(CountingRecognizer(), None, draft=DraftConfig(enabled=True))
-        pipe._enqueue(
-            Utterance(samples=np.zeros(1600, dtype=np.float32), start_s=0.0, end_s=0.1, utt_id=99)
-        )
-        queued = 0
-        for block in tone_blocks(200) + silence_blocks(35):
-            pipe.feed_block(block)
-            queued += len(pipe._draft_queue)
-        assert queued == 0
-        assert pipe.draft_dropped > 0
+        values = {"draft_enabled": "1", "draft_silence_ms": "99999", "draft_max_ms": "999999"}
+        monkeypatch.setattr(ct, "load_bool_pref", lambda k, d: values[k] != "0")
+        monkeypatch.setattr(ct, "load_int_pref", lambda k, d: int(values[k]))
+        cfg = ct.draft_from_prefs()
+        assert 0 < cfg.silence_ms < cfg_def.min_silence_ms  # 否则停顿触发永远不发生
+        assert cfg.min_s < cfg.max_s <= cfg_def.max_utterance_s
 
-    def test_stale_draft_cannot_outrank_final(self) -> None:
-        """定稿已上屏后，迟到的同句草稿必须作废（不能盖掉定稿）。"""
-        pipe = RecognitionPipeline(CountingRecognizer(), None, draft=DraftConfig(enabled=True))
-        shown: list[tuple[str, str, int, bool]] = []
-        pipe.set_on_text(lambda o, t, u: shown.append((o, t, u.utt_id, u.is_draft)))
-        pipe._enqueue(
-            Utterance(samples=np.zeros(3200, dtype=np.float32), start_s=0.0, end_s=0.2, utt_id=7)
-        )
-        assert pipe.step()
-        pipe._enqueue_draft(
-            Utterance(
-                samples=np.zeros(1600, dtype=np.float32),
-                start_s=0.0,
-                end_s=0.1,
-                utt_id=7,
-                is_draft=True,
-            )
-        )
-        assert pipe.step() is False
-        assert [d for _o, _t, _u, d in shown] == [False]
-        assert pipe.draft_dropped >= 1
+        values2 = {"draft_enabled": "1", "draft_silence_ms": "1", "draft_max_ms": "1"}
+        monkeypatch.setattr(ct, "load_int_pref", lambda k, d: int(values2[k]))
+        cfg2 = ct.draft_from_prefs()
+        assert cfg2.silence_ms >= ct.DRAFT_MIN_SILENCE_MS  # 不许退化成每块都吐
+        assert cfg2.max_s >= cfg2.min_s

@@ -36,7 +36,6 @@ from .segmenter import Utterance
 STAGES = ("split", "rec_start", "rec_end", "orig_shown", "tr_start", "tr_end", "shown")
 
 #: 草稿打点（Issue #17 新增；与 STAGES 分开，避免改变既有「完整生命周期」判定）
-DRAFT_STAGES = ("draft_shown",)
 
 
 @dataclass
@@ -143,7 +142,7 @@ class LatencyTracer:
         pipe = RecognitionPipeline(rec, trans, tracer=tracer)
         ...跑一段时间后读 tracer.traces() / tracer.breakdowns()
 
-    结构：records 是只增不改的历史（上限 max_retained，满时丢最旧旧）；
+    结构：records 是只增不改的历史（上限 max_retained，满时丢最旧）；
     pending 只跟踪「已 split 未上屏」的在途句。在途身份用弱引用核对对象本身，
     句子对象被回收后其 id 若被新句复用，旧记录留在 records 里、绝不覆盖——
     这是基准逐句等待「完成句数」能单调增长的前提。trace 不持有音频样本。

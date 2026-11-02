@@ -8,8 +8,10 @@
 
 边说边出（Issue #17）：断句器可以在整句判定结束之前先吐出「草稿片段」。草稿走
 单独一条队列，并遵守三条硬规则，保证它不把真实延迟（尤其排队）拖坏：
-1. 定稿优先：worker 永远先取整句队列，草稿只在整句队列空时才处理——一句话的
-   定稿不会排在任何草稿后面；
+1. 定稿优先：**已入队**的整句永远比草稿先被取走——一句话的定稿不会排在任何草稿
+   后面。消不掉的唯一代价是「正在识别中的那一条草稿」：Recognizer 没有取消接口，
+   所以定稿最多多等一次识别调用（草稿的音频比整句短，这次调用通常也更短）；
+   整句队列一旦有积压，草稿立刻不入队，积压不会被草稿加深。
 2. 同一句只保留最新草稿：新草稿挤掉旧草稿，整句定稿到达则清掉本句待处理草稿；
 3. 整句队列有积压（背压）时直接丢弃草稿，不加戏、不烧配额。
 草稿只送识别，绝不送翻译（否则额度直接翻倍）；定稿一定覆盖草稿。
@@ -69,7 +71,7 @@ class RecognitionPipeline:
         self._on_text: Callable[[str, str, Utterance], None] | None = None
         self._queue: list[Utterance] = []
         self._draft_queue: deque[Utterance] = deque(maxlen=max(1, max_draft_queue))
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # 可重入：入队判断里会再读已定稿集合
         self._worker: threading.Thread | None = None
         self._running = False
         self._max_queue = 20  # 背压：最多积压 20 句
@@ -160,6 +162,8 @@ class RecognitionPipeline:
 
     def _enqueue_draft(self, draft: Utterance) -> None:
         """草稿入队：整句队列有积压就不入（保护排队），同句只留最新一条。"""
+        if not self.draft_enabled:  # 已关掉：一条都不再往里塞
+            return
         with self._lock:
             if self._queue or self._is_settled(draft.utt_id):
                 self._draft_dropped += 1
@@ -170,7 +174,11 @@ class RecognitionPipeline:
             self._draft_queue.append(draft)
 
     def _is_settled(self, utt_id: int) -> bool:
-        return bool(utt_id) and utt_id in self._settled
+        """这句是否已经定稿上屏（读锁内：worker 与音频线程会并发增删这个队列）。"""
+        if not utt_id:
+            return False
+        with self._lock:
+            return utt_id in self._settled
 
     # ---------- 后台 worker ----------
 
@@ -203,22 +211,17 @@ class RecognitionPipeline:
             self._process_utterance(utt)
         return True
 
-    @property
-    def pending(self) -> bool:
-        """是否还有待处理项（整句或草稿）——基准同步喂入时用来决定要不要等。"""
-        with self._lock:
-            return bool(self._queue) or bool(self._draft_queue)
-
     def _process_draft(self, utt: Utterance) -> None:
         """草稿：只送识别、不送翻译；定稿已上屏则作废（不能让它盖掉定稿）。"""
-        if self._is_settled(utt.utt_id):
+        if self._is_settled(utt.utt_id) or not self.draft_enabled:
             with self._lock:
                 self._draft_dropped += 1
             return
         ok, result = self._recognizer.transcribe(utt.samples, 16000)
         if not ok or not result:
             return  # 草稿失败/为空：静默，不打扰用户
-        if self._is_settled(utt.utt_id):
+        # 识别这一下的工夫里用户可能已经关掉开关，或这句已定稿：都不能再上屏
+        if self._is_settled(utt.utt_id) or not self.draft_enabled:
             with self._lock:
                 self._draft_dropped += 1
             return

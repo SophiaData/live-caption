@@ -53,7 +53,6 @@ class SubtitleWindow(QWidget):
         self._drag_offset: QPoint | None = None
         # 边说边出（Issue #17）：这一行现在属于哪一句、是草稿还是定稿
         self._is_draft = False
-        self._draft_id = 0
         self._finalized_id = 0
 
         layout = QVBoxLayout(self)
@@ -199,7 +198,6 @@ class SubtitleWindow(QWidget):
             if utt_id <= self._finalized_id:
                 return
             self._is_draft = True
-            self._draft_id = utt_id
             self._trans_label.setText(original)
             self._orig_label.setText("")
             self._orig_label.setVisible(False)
@@ -208,7 +206,6 @@ class SubtitleWindow(QWidget):
         if utt_id:
             self._finalized_id = max(self._finalized_id, utt_id)
         self._is_draft = False
-        self._draft_id = 0
         if translation:
             self._trans_label.setText(translation)
             self._orig_label.setText(original)
