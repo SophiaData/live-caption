@@ -1,5 +1,8 @@
 """确定性测试：四个设备/界面装配层模块。"""
 
+import ctypes
+import sys
+import time
 from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call
@@ -148,6 +151,10 @@ class FakeSCKConfiguration(FakeAllocated):
     instance: "FakeSCKConfiguration | None" = None
 
     def __init__(self) -> None:
+        self.captures_audio: bool | None = None
+        self.excludes_audio: bool | None = None
+        self.sample_rate: int | None = None
+        self.queue_depth: int | None = None
         self.__class__.instance = self
 
     def setCapturesAudio_(self, value: bool) -> None:
@@ -194,6 +201,48 @@ class FakeDelegate:
         return self
 
 
+PCM_48K_STEREO = np.ones(4800 * 2, dtype=np.float32).tobytes()
+
+
+class _FakeCoreMedia:
+    """CoreMedia 替身：48kHz、双声道交错的 4800 帧满量程 float32 PCM。"""
+
+    @staticmethod
+    def CMSampleBufferGetFormatDescription(_sample_buffer: object) -> object:
+        return "format-description"
+
+    @staticmethod
+    def CMAudioFormatDescriptionGetStreamBasicDescription(_fmt: object) -> tuple[int, ...]:
+        return (48000, 0, 0, 0, 0, 0, 2)
+
+    @staticmethod
+    def CMSampleBufferGetDataBuffer(_sample_buffer: object) -> object:
+        return "block-buffer"
+
+    @staticmethod
+    def CMBlockBufferGetDataLength(_block_buffer: object) -> int:
+        return len(PCM_48K_STEREO)
+
+    @staticmethod
+    def CMBlockBufferCopyDataBytes(
+        _block_buffer: object, _offset: int, length: int, destination: object
+    ) -> tuple[int]:
+        ctypes.memmove(destination, PCM_48K_STEREO[:length], length)
+        return (0,)
+
+
+class _JumpingClock:
+    """每读一次就跳过 100 秒的假单调时钟：让 _pump_until 的超时立即到期，不真等。"""
+
+    def __init__(self) -> None:
+        self._now = 1000.0
+
+    def __call__(self) -> float:
+        value = self._now
+        self._now += 100.0
+        return value
+
+
 def fake_sck_modules() -> dict[str, object]:
     return {
         "Quartz": SimpleNamespace(
@@ -222,6 +271,7 @@ def test_sck_session_start_stop_uses_injected_modules(monkeypatch: pytest.Monkey
     config = FakeSCKConfiguration.instance
     assert config is not None
     assert config.captures_audio is True
+    assert config.excludes_audio is False
     assert config.sample_rate == sck_session.TARGET_SAMPLE_RATE
     assert config.queue_depth == 3
     stream = FakeSCKStream.instances[-1]
@@ -247,8 +297,14 @@ def test_sck_session_content_error_is_user_facing(monkeypatch: pytest.MonkeyPatc
         session.start()
 
 
+@pytest.fixture(scope="module")
+def real_delegate_cls() -> object:
+    """真实的 PyObjC delegate 类（ObjC 类名每进程只能注册一次，走生产缓存）。"""
+    return sck_session._make_delegate_class()
+
+
 def test_sck_delegate_audio_frame_resamples_and_reports_level(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, real_delegate_cls: object
 ) -> None:
     received: list[tuple[np.ndarray, float]] = []
     session = sck_session.SCKSession(lambda block, level: received.append((block, level)))
@@ -257,13 +313,35 @@ def test_sck_delegate_audio_frame_resamples_and_reports_level(
         "extract_audio_samples",
         lambda _sample_buffer: (np.ones(4800, dtype=np.float32), 48000),
     )
-    monkeypatch.setattr(sck_session, "_DELEGATE_CLASS", None)
-    delegate = sck_session._make_delegate_class().alloc().initWithCallback_(session._on_audio_frame)
+    delegate = real_delegate_cls.alloc().initWithCallback_(session._on_audio_frame)  # type: ignore[attr-defined]
 
     delegate.stream_didOutputSampleBuffer_ofType_(None, object(), 0)
     assert received == []
 
     delegate.stream_didOutputSampleBuffer_ofType_(None, object(), sck_session.SCK_OUTPUT_TYPE_AUDIO)
+    assert len(received[0][0]) == pytest.approx(1600, abs=2)
+    assert received[0][1] == pytest.approx(1.0)
+
+
+def test_sck_delegate_forwards_sample_buffer_through_real_parse(
+    monkeypatch: pytest.MonkeyPatch, real_delegate_cls: object
+) -> None:
+    """真链路：sample buffer → 真实 extract_audio_samples → delegate → on_block。
+
+    CoreMedia 用替身模块（sys.modules 注入），不碰真实音频设备；
+    extract_audio_samples 与 delegate 类体都是生产代码，未被 patch。
+    """
+    received: list[tuple[np.ndarray, float]] = []
+    session = sck_session.SCKSession(lambda block, level: received.append((block, level)))
+    monkeypatch.setitem(sys.modules, "CoreMedia", _FakeCoreMedia)
+    delegate = real_delegate_cls.alloc().initWithCallback_(session._on_audio_frame)  # type: ignore[attr-defined]
+
+    delegate.stream_didOutputSampleBuffer_ofType_(None, object(), 0)
+    assert received == []
+
+    delegate.stream_didOutputSampleBuffer_ofType_(None, object(), sck_session.SCK_OUTPUT_TYPE_AUDIO)
+    assert len(received) == 1
+    # 48kHz / 双声道交错的 4800 帧 → 单声道 4800 点 → 重采样后约 1600 点，满量程
     assert len(received[0][0]) == pytest.approx(1600, abs=2)
     assert received[0][1] == pytest.approx(1.0)
 
@@ -289,13 +367,45 @@ def test_sck_session_add_output_error_stops_stream(monkeypatch: pytest.MonkeyPat
     )
     monkeypatch.setattr(sck_session, "_sck_modules", lambda: mods)
     monkeypatch.setattr(sck_session, "_make_delegate_class", lambda: FakeDelegate)
-    monkeypatch.setattr(
-        sck_session.SCKSession, "_pump_until", staticmethod(lambda *_args, **_kwargs: None)
-    )
 
     with pytest.raises(SCKCaptureError, match="挂载音频输出失败：output failed"):
         sck_session.SCKSession(lambda _block, _level: None).start()
     assert ErrorStreamFactory.stream.stopped
+
+
+def test_sck_session_add_output_signature_error_falls_back_to_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """addStreamOutput 调用形式异常时不崩，交给后续「启动捕获超时」暴露。"""
+
+    class SignatureErrorStream(FakeSCKStream):
+        def addStreamOutput_type_sampleHandlerQueue_error_(self, *args: object) -> None:
+            raise RuntimeError("unrecognized selector")
+
+        def startCaptureWithCompletionHandler_(self, _callback: object) -> None:
+            return None
+
+    class SignatureErrorStreamFactory(FakeAllocated):
+        stream: SignatureErrorStream
+
+        def initWithFilter_configuration_delegate_(self, *args: object) -> SignatureErrorStream:
+            self.__class__.stream = SignatureErrorStream()
+            return self.__class__.stream
+
+    mods = fake_sck_modules()
+    mods["sck"] = SimpleNamespace(
+        SCShareableContent=FakeShareableContent,
+        SCContentFilter=FakeFilter,
+        SCStreamConfiguration=FakeSCKConfiguration,
+        SCStream=SignatureErrorStreamFactory,
+    )
+    monkeypatch.setattr(sck_session, "_sck_modules", lambda: mods)
+    monkeypatch.setattr(sck_session, "_make_delegate_class", lambda: FakeDelegate)
+    monkeypatch.setattr(time, "monotonic", _JumpingClock())
+
+    with pytest.raises(SCKCaptureError, match="启动捕获超时"):
+        sck_session.SCKSession(lambda _block, _level: None).start()
+    assert SignatureErrorStreamFactory.stream.stopped
 
 
 def test_sck_session_start_timeout_stops_stream(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -319,13 +429,26 @@ def test_sck_session_start_timeout_stops_stream(monkeypatch: pytest.MonkeyPatch)
     )
     monkeypatch.setattr(sck_session, "_sck_modules", lambda: mods)
     monkeypatch.setattr(sck_session, "_make_delegate_class", lambda: FakeDelegate)
-    monkeypatch.setattr(
-        sck_session.SCKSession, "_pump_until", staticmethod(lambda *_args, **_kwargs: None)
-    )
+    monkeypatch.setattr(time, "monotonic", _JumpingClock())
 
     with pytest.raises(SCKCaptureError, match="启动捕获超时"):
         sck_session.SCKSession(lambda _block, _level: None).start()
     assert HangingStreamFactory.stream.stopped
+
+
+def test_sck_session_content_timeout_is_user_facing(monkeypatch: pytest.MonkeyPatch) -> None:
+    class SilentContent:
+        @staticmethod
+        def getShareableContentWithCompletionHandler_(_callback: object) -> None:
+            return None
+
+    mods = fake_sck_modules()
+    mods["sck"] = SimpleNamespace(SCShareableContent=SilentContent)
+    monkeypatch.setattr(sck_session, "_sck_modules", lambda: mods)
+    monkeypatch.setattr(time, "monotonic", _JumpingClock())
+
+    with pytest.raises(SCKCaptureError, match="获取屏幕内容超时"):
+        sck_session.SCKSession(lambda _block, _level: None).start()
 
 
 def test_sck_session_stop_before_start_is_safe() -> None:
@@ -339,13 +462,34 @@ class StoredConfig:
 
 
 class ImmediateWorker(QObject):
+    """假连接测试线程：start() 同步真实 emit done 信号（不起线程、不联网）。"""
+
     done = Signal(bool, str)
+
+    def __init__(self, _config: object, mode: str) -> None:
+        super().__init__()
+        self._mode = mode
+
+    def start(self) -> None:
+        # 识别槽位必须映射到 "audio"，翻译槽位到 "chat"；映射写错时这里就会走失败分支
+        if self._mode == "audio":
+            self.done.emit(True, "连接成功")
+        else:
+            self.done.emit(False, "密钥无效（401）")
+
+
+class SilentWorker(QObject):
+    """假连接测试线程：记录被创建，但绝不启动真线程、不发信号、不联网。"""
+
+    done = Signal(bool, str)
+    created: list["SilentWorker"] = []
 
     def __init__(self, _config: object, _mode: str) -> None:
         super().__init__()
+        self.__class__.created.append(self)
 
     def start(self) -> None:
-        self.done.emit(True, "连接成功")
+        return None
 
 
 def test_config_wizard_worker_done_signal_updates_status(
@@ -362,6 +506,28 @@ def test_config_wizard_worker_done_signal_updates_status(
     dialog._asr_test_btn.click()
 
     assert dialog._asr_status.text() == "✅ 连接成功"
+
+
+def test_config_wizard_worker_done_signal_shows_failure_and_keeps_save_disabled(
+    qtbot: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """失败分支同样经真信号投递：❌ 文案来自 msg，保存按钮保持禁用。"""
+    monkeypatch.setattr(config_wizard, "load_config", lambda _slot: None)
+    monkeypatch.setattr(config_wizard, "TestConnectionWorker", ImmediateWorker)
+    dialog = config_wizard.ConfigWizard()
+    qtbot.addWidget(dialog)  # type: ignore[attr-defined]
+    dialog._asr_url.setText("https://asr.test")
+    dialog._asr_key.setText("test-key")
+    dialog._asr_model.setText("test-model")
+    dialog._trans_url.setText("https://translate.test")
+    dialog._trans_key.setText("translate-key")
+    dialog._trans_model.setText("translate-model")
+
+    dialog._trans_test_btn.click()
+
+    assert dialog._trans_status.text() == "❌ 密钥无效（401）"
+    assert dialog._asr_status.text() == "未测试"
+    assert dialog._save_btn.isEnabled() is False
 
 
 def test_config_wizard_save_button_signal_persists_both_slots(
@@ -438,6 +604,8 @@ def test_config_wizard_missing_slot_fields_show_error(
     model: str,
 ) -> None:
     monkeypatch.setattr(config_wizard, "load_config", lambda _slot: None)
+    monkeypatch.setattr(config_wizard, "TestConnectionWorker", SilentWorker)
+    SilentWorker.created.clear()
     dialog = config_wizard.ConfigWizard()
     qtbot.addWidget(dialog)  # type: ignore[attr-defined]
 
@@ -450,6 +618,7 @@ def test_config_wizard_missing_slot_fields_show_error(
 
     assert "请先填完" in dialog._asr_status.text()
     assert dialog._save_btn.isEnabled() is False
+    assert SilentWorker.created == []
 
 
 def test_config_wizard_save_requires_both_successes(
