@@ -225,7 +225,15 @@ def _run_once(
     tracer = LatencyTracer(clock.now)
     rec = ClockFakeRecognizer(clock, p.recognizer_s)
     trans = ClockFakeTranslator(clock, p.translator_s)
-    pipe = RecognitionPipeline(rec, trans, tracer=tracer, draft=draft)  # type: ignore[arg-type]
+    # 把假时钟也交给管道的计时：草稿「值不值得送」的自适应判断才能按注入耗时来跑，
+    # 否则基准演示的是墙钟路径、生产走的是另一条路，报告就不诚实了。
+    pipe = RecognitionPipeline(
+        rec,
+        trans,  # type: ignore[arg-type]
+        tracer=tracer,
+        draft=draft,
+        clock=clock.now,
+    )
 
     def display_hook(original: str, translation: str, utt: object) -> None:
         # 上屏是有代价的：译文上屏与草稿上屏都按注入的 ui_s 计时
