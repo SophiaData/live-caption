@@ -1,0 +1,44 @@
+"""字幕设置面板真实捕获：勾选（默认开启）与取消勾选（关闭）两态。"""
+
+import sys
+
+from PySide6.QtGui import QColor, QFont, QPainter, QPixmap  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+sys.path.insert(0, "/Users/gaotingkai/.dsh/state/superagent/work/draft-subtitles-a8f0014ff6ef")
+from app.ui.subtitle_settings import SubtitleSettingsDialog  # noqa: E402
+from app.ui.subtitle_window import SubtitleWindow  # noqa: E402
+
+app = QApplication(sys.argv)
+changes: list[bool] = []
+win = SubtitleWindow()
+win.resize(960, 170)
+
+for checked, title, path in (
+    (True, "⑤ 字幕设置面板 · 改动后 head 44f9d2d（默认勾选 = 开启）", "/tmp/lcd/p_set_on.png"),
+    (False, "⑥ 字幕设置面板 · 改动后 head 44f9d2d（取消勾选 = 关闭）", "/tmp/lcd/p_set_off.png"),
+):
+    dlg = SubtitleSettingsDialog(
+        win, draft_enabled=checked, on_draft_change=lambda v: changes.append(v)
+    )
+    dlg.resize(460, dlg.sizeHint().height() + 10)
+    dlg.show()
+    QApplication.processEvents()
+    shot = dlg.grab()
+    p = QPixmap(max(500, shot.width() + 24), shot.height() + 92)
+    p.fill(QColor("#101317"))
+    g = QPainter(p)
+    g.setPen(QColor("#e6e6e6"))
+    g.setFont(QFont("PingFang SC", 15, QFont.Weight.Bold))
+    g.drawText(12, 30, title)
+    g.setFont(QFont("PingFang SC", 12))
+    g.setPen(QColor("#8b949e"))
+    g.drawText(12, 58, f"真实控件截图 · 勾选状态 = {dlg._draft_check.isChecked()}")
+    g.drawPixmap(12, 72, shot)
+    g.end()
+    p.save(path)
+    # 顺手验一下取消勾选真的会通知管道（不是画个样子）
+    dlg._draft_check.setChecked(not dlg._draft_check.isChecked())
+    dlg.close()
+
+print("settings panels ok; 面板通知到的开关变化:", changes)
