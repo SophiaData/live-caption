@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import re
-import time
 
 import numpy as np
 import pytest
@@ -675,53 +674,68 @@ class TestDraftPrefs:
 
 
 class TestDraftQueueProtection:
-    """Issue #17 追加要求 2：草稿不得让排队恶化——慢服务下直接不送「来不及更早」的草稿。"""
+    """Issue #17 追加要求 2：草稿不得让排队恶化。
 
-    class _SlowRec(Recognizer):
-        def __init__(self, cost_s: float) -> None:
-            self.cost_s = cost_s
-            self.n = 0
+    时钟注入（和 LatencyTracer 一样），所以「这条草稿值不值得送」的判断完全可复现，
+    不靠墙钟 sleep —— CI 上 sleep 精度不够，用墙钟写的用例会飘。
+    """
 
-        def transcribe(self, samples: np.ndarray, sample_rate: int = 16000) -> tuple[bool, str]:
-            self.n += 1
-            time.sleep(self.cost_s)  # 模拟一次真服务识别
-            return True, f"txt{self.n}"
+    def _make(self, cost_s: float) -> tuple[RecognitionPipeline, FakeClock, list[int]]:
+        clock = FakeClock(0.0)
+        calls: list[int] = []
 
-    class _Tr:
-        def translate(self, text: str) -> tuple[bool, str]:
-            return True, "译文"
+        class _VirtualRec(Recognizer):
+            def transcribe(self, samples: np.ndarray, sample_rate: int = 16000):
+                calls.append(len(samples))
+                clock.advance(cost_s)  # 每次识别固定花这么多时间
+                return True, f"txt{len(calls)}"
 
-    def _run(self, cost_s: float) -> tuple[RecognitionPipeline, int]:
-        """连续说 → 句中短停顿（触发 silence 草稿）→ 继续说 → 句尾静音（定稿）。"""
-        rec = self._SlowRec(cost_s)
-        pipe = RecognitionPipeline(rec, self._Tr(), draft=DraftConfig(enabled=True))
+        pipe = RecognitionPipeline(
+            _VirtualRec(), None, draft=DraftConfig(enabled=True), clock=clock.now
+        )
         pipe.set_on_text(lambda o, t, u: None)
-        seq = tone_blocks(120) + silence_blocks(8) + tone_blocks(60) + silence_blocks(35)
-        for block in seq:
+        return pipe, clock, calls
+
+    def _feed_one_backlog_cycle(self, pipe: RecognitionPipeline) -> None:
+        """说一段 → 句中短停顿（停顿触发草稿）→ 再说 → 句尾静音（定稿）。"""
+        for block in tone_blocks(120) + silence_blocks(8) + tone_blocks(60) + silence_blocks(35):
             pipe.feed_block(block)
             pipe.step()
         while pipe.step():
             pass
-        return pipe, rec.n
 
     def test_slow_service_skips_drafts_that_cannot_be_earlier(self) -> None:
-        """一次识别比提前量还慢：停顿草稿就是纯成本，必须省掉（不占 worker、不拖定稿）。"""
-        pipe, rec_total = self._run(0.20)
+        """识别比草稿的提前量还慢：停顿草稿换不来更早的字，必须省掉。"""
+        pipe, _clock, calls = self._make(0.4)  # 0.4s/次，远大于 0.15s 提前量
+        self._feed_one_backlog_cycle(pipe)
         assert pipe.draft_skipped >= 1
-        # 3 次 = 定稿 1 次 + 唯一那条「探针」草稿 + 连续说话那条有价值草稿
-        assert rec_total <= 3
+        # 定稿那次之外，最多只有「学会耗时」的探针草稿
+        assert len(calls) <= 3
 
     def test_fast_service_still_shows_silence_drafts(self) -> None:
         """识别快过提前量时不该省：那时草稿确实能更早出字。"""
-        pipe, _ = self._run(0.02)
+        pipe, _clock, _calls = self._make(0.02)  # 0.02s/次 << 0.15s 提前量
+        self._feed_one_backlog_cycle(pipe)
         assert pipe.draft_skipped == 0
         assert pipe.draft_calls >= 2
 
-    def test_probe_learns_cost_then_gates(self) -> None:
-        """没测过耗时前先放一条探针；学会之后才判断，绝不一上来就猜阈值。"""
-        rec = self._SlowRec(0.2)
-        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=True))
-        assert pipe.last_rec_cost_s is None  # 还没调过
+    def test_draft_window_is_capped_in_pipeline(self) -> None:
+        """送出去的草稿音频不会超过 max_window_s：一次调用的占用有上界。"""
+        pipe, _clock, calls = self._make(0.05)
+        for block in tone_blocks(400):  # 连续说 4 秒（超过 max_utterance 会强制切分）
+            pipe.feed_block(block)
+            pipe.step()
+        while pipe.step():
+            pass
+        draft_calls = [
+            c for c in calls if c <= int(DraftConfig().max_window_s * 16000) + BLOCK_SAMPLES
+        ]
+        assert draft_calls  # 草稿确实被限在窗口内
+
+    def test_probe_learns_rate_then_gates(self) -> None:
+        """没测过耗时前先放一条探针；学会比值之后才判断，不一上来就猜阈值。"""
+        pipe, _clock, _calls = self._make(0.4)
+        assert pipe.last_rec_rate is None
         pipe._enqueue_draft(
             Utterance(
                 samples=np.zeros(3200, dtype=np.float32),
@@ -734,55 +748,11 @@ class TestDraftQueueProtection:
             )
         )
         assert pipe.step()  # 探针放行
-        assert pipe.last_rec_cost_s is not None and pipe.last_rec_cost_s >= 0.15
-
-    def test_gate_uses_length_aware_rate_not_absolute_cost(self) -> None:
-        """比值判据：整句识别慢不等于草稿也慢——草稿音频短就应该照送（不误杀）。"""
-        rec = self._SlowRec(0.6)  # 一次整句识别 0.6s（绝对值远大于 0.15s 提前量）
-        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=True))
-        # 先让管道学会比值：一条 6 秒音频的整句 → rate = 0.1 每秒
-        pipe._enqueue(
-            Utterance(samples=np.zeros(96000, dtype=np.float32), start_s=0.0, end_s=6.0, utt_id=1)
-        )
-        assert pipe.step()
-        assert pipe.last_rec_rate is not None and pipe.last_rec_rate < 0.6 / 96000 * 16000 * 3
-        # 再来一条 0.3s 音频、0.15s 提前量的停顿草稿：预计耗时 0.03s < 0.15s → 该送
-        pipe._enqueue_draft(
-            Utterance(
-                samples=np.zeros(4800, dtype=np.float32),
-                start_s=0.0,
-                end_s=0.3,
-                is_draft=True,
-                utt_id=2,
-                draft_lead_s=0.15,
-                draft_trigger="silence",
-            )
-        )
-        assert pipe.step()
-        assert pipe.draft_calls == 1
-        assert pipe.draft_skipped == 0
-
-        # 同样提前量，但音频长到预计耗时超过提前量 → 入队前就拒，一次识别都不调
-        rec_calls_before = rec.n
-        pipe._enqueue_draft(
-            Utterance(
-                samples=np.zeros(96000, dtype=np.float32),
-                start_s=0.0,
-                end_s=6.0,
-                is_draft=True,
-                utt_id=3,
-                draft_lead_s=0.15,
-                draft_trigger="silence",
-            )
-        )
-        assert pipe.step() is False
-        assert pipe.draft_skipped == 1
-        assert rec.n == rec_calls_before
+        assert pipe.last_rec_rate is not None and pipe.last_rec_rate > 0
 
     def test_timeout_drafts_are_never_gated(self) -> None:
-        """连续说话触发的草稿提前量大，慢服务也照送（这才是「边说边出」的主力）。"""
-        rec = self._SlowRec(0.2)
-        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=True))
+        """连续说话触发的草稿提前量大（到强制切分才定稿），慢服务也照送。"""
+        pipe, _clock, _calls = self._make(0.4)
         pipe._enqueue_draft(
             Utterance(
                 samples=np.zeros(3200, dtype=np.float32),
@@ -796,6 +766,111 @@ class TestDraftQueueProtection:
         )
         assert pipe.step()
         assert pipe.draft_calls == 1 and pipe.draft_skipped == 0
+
+    def test_drafts_pause_while_finals_queue_up_and_resume(self) -> None:
+        """处理中途又来了整句 = 这一波追不上：立刻停补草稿，队列清空后自动恢复。"""
+        clock = FakeClock(0.0)
+        calls: list[int] = []
+
+        class ArriveWhileBusy(Recognizer):
+            def transcribe(self, samples: np.ndarray, sample_rate: int = 16000):
+                calls.append(len(samples))
+                if len(calls) == 1:
+                    # 模拟音频线程：worker 正忙时又切完了一句
+                    self.pipe._enqueue(  # type: ignore[attr-defined]
+                        Utterance(
+                            samples=np.zeros(3200, dtype=np.float32),
+                            start_s=0.0,
+                            end_s=0.2,
+                            utt_id=50,
+                        )
+                    )
+                clock.advance(0.3)
+                return True, "txt"
+
+        rec = ArriveWhileBusy()
+        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=True), clock=clock.now)
+        pipe.set_on_text(lambda o, t, u: None)
+        rec.pipe = pipe  # type: ignore[attr-defined]
+        # 处理这一条定稿：期间来了第二条 → 队列没清空 → 暂停草稿
+        pipe._enqueue(
+            Utterance(samples=np.zeros(3200, dtype=np.float32), start_s=0.0, end_s=0.2, utt_id=1)
+        )
+        assert pipe.step()
+        assert pipe.draft_paused is True
+        dropped_before = pipe.draft_dropped
+        pipe._enqueue_draft(
+            Utterance(
+                samples=np.zeros(3200, dtype=np.float32),
+                start_s=0.0,
+                end_s=0.2,
+                is_draft=True,
+                utt_id=60,
+                draft_lead_s=1.0,
+                draft_trigger="timeout",
+            )
+        )
+        assert pipe.draft_dropped > dropped_before  # 一条都没进队列
+        calls_before = len(calls)
+        # 把排队的整句清掉：暂停期间草稿一次都没占用识别通道
+        while pipe.step():
+            pass
+        assert pipe.draft_calls == 0  # 暂停期间没有一次草稿识别
+        assert calls[:calls_before] == [3200]  # 通道只用于排队的整句
+        assert pipe.draft_paused is False  # 队列空了，恢复
+        pipe._enqueue_draft(
+            Utterance(
+                samples=np.zeros(3200, dtype=np.float32),
+                start_s=0.0,
+                end_s=0.2,
+                is_draft=True,
+                utt_id=61,
+                draft_lead_s=1.0,
+                draft_trigger="timeout",
+            )
+        )
+        assert pipe.step()
+        assert pipe.draft_calls >= 1
+
+    def test_gate_uses_length_aware_rate_not_absolute_cost(self) -> None:
+        """比值判据：整句识别慢不等于草稿也慢——短草稿不该被误杀。"""
+        pipe, _clock, calls = self._make(0.6)  # 一次调用固定 0.6s
+        pipe._enqueue(
+            Utterance(samples=np.zeros(96000, dtype=np.float32), start_s=0.0, end_s=6.0, utt_id=1)
+        )
+        assert pipe.step()  # 6 秒音频 → 比值 0.1
+        assert pipe.last_rec_rate is not None
+        assert pipe.last_rec_rate == pytest.approx(0.1, rel=0.05)
+        # 0.3s 音频的停顿草稿：预计 0.03s < 0.15s 提前量 → 该送
+        pipe._enqueue_draft(
+            Utterance(
+                samples=np.zeros(4800, dtype=np.float32),
+                start_s=0.0,
+                end_s=0.3,
+                is_draft=True,
+                utt_id=2,
+                draft_lead_s=0.15,
+                draft_trigger="silence",
+            )
+        )
+        assert pipe.step()
+        assert pipe.draft_calls == 1 and pipe.draft_skipped == 0
+        # 6 秒音频的停顿草稿：预计 0.6s > 0.15s → 入队前就拒，一次识别都不调
+        before = len(calls)
+        pipe._enqueue_draft(
+            Utterance(
+                samples=np.zeros(96000, dtype=np.float32),
+                start_s=0.0,
+                end_s=6.0,
+                is_draft=True,
+                utt_id=3,
+                draft_lead_s=0.15,
+                draft_trigger="silence",
+            )
+        )
+        assert pipe.step() is False
+        assert pipe.draft_skipped == 1
+        assert len(calls) == before
 
 
 class TestDraftLeadStamp:

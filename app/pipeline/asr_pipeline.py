@@ -63,6 +63,7 @@ class RecognitionPipeline:
         config: SegmenterConfig | None = None,
         draft: DraftConfig | None = None,
         max_draft_queue: int = 1,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self._recognizer = recognizer
         self._translator = translator
@@ -77,7 +78,16 @@ class RecognitionPipeline:
         self._max_queue = 20  # 背压：最多积压 20 句
         self._dropped = 0
         self._settled: deque[int] = deque(maxlen=_SETTLED_KEEP)  # 已定稿句号
+        # 「这一波追不上了」的信号：worker 正忙时又来了整句，说明定稿已经在排队。
+        # 一旦出现就先停补草稿，等整句队列清空再恢复：草稿是锦上添花，
+        # 管道追不上时绝不能再加戏（Issue #17 追加要求 2）。
+        self._processing = False
+        self._arrived_while_busy = False
+        self._draft_paused = False
         self._draft_calls = 0  # 草稿实际调用识别器的次数（成本可见）
+        # 计时用的时钟：默认墙钟；测试/基准可注入假时钟，让「这条草稿值不值得送」的
+        # 判断完全可复现（CI 上 sleep 的精度不够，靠墙钟写用例会飘）。
+        self._clock = clock or time.monotonic
         # 「这条草稿值不值得送」的判据：实测的一次识别耗时（滑动均值）。
         # 停顿触发的草稿只有 0.15s 左右的提前量，若一次识别比这更慢，它既换不来
         # 更早的字，又会让紧随其后的定稿多等一次调用（真服务实测会把排队拖坏）。
@@ -95,6 +105,11 @@ class RecognitionPipeline:
     @property
     def draft_enabled(self) -> bool:
         return self._segmenter.draft_enabled
+
+    @property
+    def draft_paused(self) -> bool:
+        """是否正因为「整句在排队」而暂停补草稿。"""
+        return self._draft_paused
 
     def set_draft_enabled(self, on: bool) -> None:
         """开/关「边说边出」；关掉后立刻不再产出草稿，行为退回「说完再出字幕」。"""
@@ -152,6 +167,8 @@ class RecognitionPipeline:
     # ---------- 入队 ----------
 
     def _enqueue(self, utt: Utterance) -> None:
+        if self._processing:
+            self._arrived_while_busy = True  # 处理中途又来整句 = 已经排队
         with self._lock:
             if len(self._queue) >= self._max_queue:
                 self._dropped += 1
@@ -174,6 +191,9 @@ class RecognitionPipeline:
             if self._queue or self._is_settled(draft.utt_id):
                 self._draft_dropped += 1
                 return
+            if self._draft_paused:
+                self._draft_dropped += 1  # 这一波追不上：草稿一律不补
+                return
             if not self._draft_worth_it(draft):
                 self._draft_skipped += 1
                 return
@@ -188,9 +208,9 @@ class RecognitionPipeline:
         比值（而不是绝对耗时）才能拿来预判一条新草稿：草稿音频比整句短得多，
         绝对均值会把「整句要 1.3s」错当成「草稿也要 1.3s」。
         """
-        t0 = time.monotonic()
+        t0 = self._clock()
         ok, result = self._recognizer.transcribe(samples, 16000)
-        cost = time.monotonic() - t0
+        cost = max(self._clock() - t0, 0.0)
         audio_s = max(len(samples) / 16000.0, 1e-3)
         with self._lock:
             self._rec_cost_ema = (
@@ -267,11 +287,27 @@ class RecognitionPipeline:
         utt = self._take()
         if utt is None:
             return False
-        if utt.is_draft:
-            self._process_draft(utt)
-        else:
-            self._process_utterance(utt)
+        self._processing = True
+        try:
+            if utt.is_draft:
+                self._process_draft(utt)
+            else:
+                self._process_utterance(utt)
+        finally:
+            self._processing = False
+            self._refresh_draft_pause()
         return True
+
+    def _refresh_draft_pause(self) -> None:
+        """处理完一项后重新判断：还要不要暂停补草稿。"""
+        with self._lock:
+            drained = not self._queue
+        busy_saw_final = self._arrived_while_busy
+        self._arrived_while_busy = False
+        if drained:
+            self._draft_paused = False  # 整句队列空了，恢复草稿
+        elif busy_saw_final:
+            self._draft_paused = True  # 还在排队且处理期间又来过整句：先不补草稿
 
     def _process_draft(self, utt: Utterance) -> None:
         """草稿：只送识别、不送翻译；定稿已上屏则作废（不能让它盖掉定稿）。"""
