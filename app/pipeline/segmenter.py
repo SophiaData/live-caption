@@ -67,6 +67,11 @@ class Utterance:
     trailing_silence_s: float = 0.0  # 句尾用于确认「说完」的静音时长（延迟观测用，Issue #16）
     utt_id: int = 0  # 句标识（>0 由 Segmenter 递增分配；同一句的草稿与定稿同号）
     is_draft: bool = False  # True=句中子窗口草稿，False=整句定稿
+    # 草稿专用（Issue #17）：这条草稿比「预计定稿时刻」早几秒、由什么触发。
+    # 停顿触发的提前量天生很小（= 整句静音阈值 − 草稿静音阈值）：若一次识别比它还慢，
+    # 这条草稿既换不来更早的字，又会让紧随的定稿多等一次调用 → 管道据此直接跳过。
+    draft_lead_s: float = 0.0
+    draft_trigger: str = ""  # "" / "silence" / "timeout"
 
     @property
     def duration_s(self) -> float:
@@ -223,13 +228,20 @@ class Segmenter:
             return
         if by_silence:
             self._draft_silence_fired = True
+            # 停顿若继续，整句还要再等 (min_silence − 本阈值) 秒才判定——这就是本条草稿的提前量
+            lead_s = self._cfg.min_silence_ms / 1000 - d.silence_ms / 1000
+            trigger = "silence"
+        else:
+            # 连续说话：最晚到强制切分才定稿，提前量按「还能说多久」算
+            lead_s = max(0.0, self._cfg.max_utterance_s - cur_s)
+            trigger = "timeout"
         self._draft_count += 1
         self._last_draft_s = cur_s
-        draft = self._snapshot_draft(cur_s)
+        draft = self._snapshot_draft(cur_s, lead_s, trigger)
         with self._draft_lock:  # 与 set_draft_enabled(False) 抢同一把锁，不塞回已清的列表
             self._drafts.append(draft)
 
-    def _snapshot_draft(self, cur_s: float) -> Utterance:
+    def _snapshot_draft(self, cur_s: float, lead_s: float, trigger: str) -> Utterance:
         """把当前句已缓冲的采样复制成一条草稿片段。"""
         samples = np.concatenate(self._blocks).reshape(-1)
         end_s = (self._total_samples_seen + len(self._blocks[-1])) / SAMPLE_RATE
@@ -240,6 +252,8 @@ class Segmenter:
             trailing_silence_s=0.0,  # 草稿没有「说完」确认，不参与整句延迟锚点
             utt_id=self._utt_seq,
             is_draft=True,
+            draft_lead_s=lead_s,
+            draft_trigger=trigger,
         )
 
     def _finalize_utterance(self) -> None:

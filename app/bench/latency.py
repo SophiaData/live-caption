@@ -212,7 +212,7 @@ def compare_queues(a: Sequence[LatencyBreakdown], b: Sequence[LatencyBreakdown])
 
 def _run_once(
     p: DeterministicParams, draft: DraftConfig | None
-) -> tuple[list[LatencyBreakdown], int, int, int]:
+) -> tuple[list[LatencyBreakdown], int, int, int, int]:
     """跑一遍场景，返回（分段结果, 整句识别调用, 翻译调用, 草稿识别调用）。
 
     同步驱动（喂一块 → 处理一项）：草稿与定稿的先后完全由喂入顺序决定，
@@ -241,7 +241,7 @@ def _run_once(
             pass
         if tracer.completed_count() < expected:
             raise TimeoutError(f"第 {expected} 句未走完生命周期")
-    return tracer.breakdowns(), rec.calls, trans.calls, pipe.draft_calls
+    return tracer.breakdowns(), rec.calls, trans.calls, pipe.draft_calls, pipe.draft_skipped
 
 
 def _base_header(p: DeterministicParams) -> list[str]:
@@ -261,7 +261,7 @@ def _base_header(p: DeterministicParams) -> list[str]:
 def run_deterministic(params: DeterministicParams | None = None) -> str:
     """确定性基准：真实管道 + 假时钟假件，逐句串行跑完并出报告（零真实等待）。"""
     p = params or DeterministicParams()
-    rows, _rec_calls, _trans_calls, _draft_calls = _run_once(p, p.draft)
+    rows, _rec_calls, _trans_calls, _draft_calls, _skipped = _run_once(p, p.draft)
     header = list(_base_header(p))
     if p.draft is not None and p.draft.enabled:
         header.append(f"本行是「边说边出」结果：{p.draft}")
@@ -279,10 +279,10 @@ def run_draft_compare(params: DeterministicParams | None = None) -> str:
     （确定性模式逐句串行，排队本来就接近 0）。
     """
     p = params or DeterministicParams()
-    off_rows, off_rec, off_trans, off_draft = _run_once(p, None)
+    off_rows, off_rec, off_trans, off_draft, off_skip = _run_once(p, None)
     d = p.draft if p.draft is not None else DraftConfig(enabled=True)
     seg = SegmenterConfig()  # 提前量要按断句器真实阈值算，不另写一份
-    on_rows, on_rec, on_trans, on_draft = _run_once(p, d)
+    on_rows, on_rec, on_trans, on_draft, on_skip = _run_once(p, d)
     lines = ["=== 边说边出对比（同一场景跑两遍：关闭 vs 开启）==="]
     lines.append(f"草稿参数：{d}")
     lines.append("关闭边说边出：")
@@ -300,7 +300,8 @@ def run_draft_compare(params: DeterministicParams | None = None) -> str:
     lines.append(compare_queues(off_rows, on_rows))
     lines.append(
         f"识别调用：关闭 {off_rec} 次 → 开启 {on_rec} 次（其中草稿 {on_draft} 次）；"
-        f"翻译调用：关闭 {off_trans} 次 → 开启 {on_trans} 次（草稿不送翻译，应相等）"
+        f"翻译调用：关闭 {off_trans} 次 → 开启 {on_trans} 次（草稿不送翻译，应相等）；"
+        f"因「来不及比定稿更早」主动省掉的草稿：{on_skip} 次"
     )
     lines.append("注：以上全部来自假件与虚拟时钟，不是产品真实延迟；真实排队看 LIVE。")
     lead_ms = max(0, seg.min_silence_ms - d.silence_ms)

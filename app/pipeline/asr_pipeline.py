@@ -78,6 +78,11 @@ class RecognitionPipeline:
         self._dropped = 0
         self._settled: deque[int] = deque(maxlen=_SETTLED_KEEP)  # 已定稿句号
         self._draft_calls = 0  # 草稿实际调用识别器的次数（成本可见）
+        # 「这条草稿值不值得送」的判据：实测的一次识别耗时（滑动均值）。
+        # 停顿触发的草稿只有 0.15s 左右的提前量，若一次识别比这更慢，它既换不来
+        # 更早的字，又会让紧随其后的定稿多等一次调用（真服务实测会把排队拖坏）。
+        self._rec_cost_ema: float | None = None
+        self._draft_skipped = 0  # 因为「来不及更早」而省掉的草稿数
         self._draft_dropped = 0  # 因背压/已定稿/被取代而丢弃的草稿数
 
     def set_on_text(self, cb: Callable[[str, str, Utterance], None]) -> None:
@@ -168,10 +173,50 @@ class RecognitionPipeline:
             if self._queue or self._is_settled(draft.utt_id):
                 self._draft_dropped += 1
                 return
+            if not self._draft_worth_it(draft):
+                self._draft_skipped += 1
+                return
             if self._draft_queue and self._draft_queue[-1].utt_id == draft.utt_id:
                 self._draft_queue.pop()  # 同一句：新草稿取代旧草稿
                 self._draft_dropped += 1
             self._draft_queue.append(draft)
+
+    def _timed_transcribe(self, samples: np.ndarray) -> tuple[bool, str]:
+        """调识别器并记下滑动耗时均值，供「这条草稿值不值得送」判断使用。"""
+        t0 = time.monotonic()
+        ok, result = self._recognizer.transcribe(samples, 16000)
+        cost = time.monotonic() - t0
+        with self._lock:
+            prev = self._rec_cost_ema
+            self._rec_cost_ema = cost if prev is None else 0.6 * prev + 0.4 * cost
+        return ok, result
+
+    def _draft_worth_it(self, utt: Utterance) -> bool:
+        """草稿只有在「大概率比定稿更早出现」时才送识别。
+
+        停顿触发的提前量固定是 整句静音阈值 − 草稿静音阈值（默认 0.15s）。判据只用实测
+        耗时，不写死阈值：一次识别比这个提前量还慢时，这条草稿注定换不来更早的字，只会
+        让紧随的定稿多等一次调用 → 省掉。还没测过耗时时先放一条探针（否则永远学不到）。
+        连续说话触发的草稿按剩余可说时长算提前量，通常远大于一次识别，照旧送。
+        """
+        if utt.draft_trigger != "silence":
+            return True
+        with self._lock:
+            ema = self._rec_cost_ema
+        if ema is None:
+            return True  # 第一条探针：让它跑一次，之后就学会了
+        return utt.draft_lead_s >= ema
+
+    @property
+    def draft_skipped(self) -> int:
+        """因「来不及比定稿更早」而省掉的草稿数（既省额度，也保护排队）。"""
+        return self._draft_skipped
+
+    @property
+    def last_rec_cost_s(self) -> float | None:
+        """最近一次识别的滑动耗时（秒）；没调用过就是 None。"""
+        with self._lock:
+            return self._rec_cost_ema
 
     def _is_settled(self, utt_id: int) -> bool:
         """这句是否已经定稿上屏（读锁内：worker 与音频线程会并发增删这个队列）。"""
@@ -217,7 +262,7 @@ class RecognitionPipeline:
             with self._lock:
                 self._draft_dropped += 1
             return
-        ok, result = self._recognizer.transcribe(utt.samples, 16000)
+        ok, result = self._timed_transcribe(utt.samples)
         if not ok or not result:
             return  # 草稿失败/为空：静默，不打扰用户
         # 识别这一下的工夫里用户可能已经关掉开关，或这句已定稿：都不能再上屏
@@ -239,7 +284,7 @@ class RecognitionPipeline:
         """定稿：整句识别 → 原文先上屏 → 翻译后补双语（Issue #5/#6 原路径）。"""
         if self._tracer is not None:
             self._tracer.mark("rec_start", utt)
-        ok, result = self._recognizer.transcribe(utt.samples, 16000)
+        ok, result = self._timed_transcribe(utt.samples)
         if self._tracer is not None:
             self._tracer.mark("rec_end", utt)
         if not ok:

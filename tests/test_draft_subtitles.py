@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import re
+import time
 
 import numpy as np
 import pytest
@@ -507,8 +508,8 @@ class TestLatencyReportEvidence:
 
     def test_compare_leads_positive_for_each_sentence(self) -> None:
         """每句都要有正的提前量（不是只有一句侥幸）。"""
-        off_rows, _o1, _o2, _o3 = bench._run_once(bench.DeterministicParams(speech_s=(2.0,)), None)
-        on_rows, _r1, _r2, draft_calls = bench._run_once(
+        off_rows, *_rest = bench._run_once(bench.DeterministicParams(speech_s=(2.0,)), None)
+        on_rows, _r1, _r2, draft_calls, _skip = bench._run_once(
             bench.DeterministicParams(speech_s=(2.0,)), DraftConfig(enabled=True)
         )
         assert off_rows[0].draft_lead_s is None
@@ -644,3 +645,108 @@ class TestDraftPrefs:
         cfg2 = ct.draft_from_prefs()
         assert cfg2.silence_ms >= ct.DRAFT_MIN_SILENCE_MS  # 不许退化成每块都吐
         assert cfg2.max_s >= cfg2.min_s
+
+
+class TestDraftQueueProtection:
+    """Issue #17 追加要求 2：草稿不得让排队恶化——慢服务下直接不送「来不及更早」的草稿。"""
+
+    class _SlowRec(Recognizer):
+        def __init__(self, cost_s: float) -> None:
+            self.cost_s = cost_s
+            self.n = 0
+
+        def transcribe(self, samples: np.ndarray, sample_rate: int = 16000) -> tuple[bool, str]:
+            self.n += 1
+            time.sleep(self.cost_s)  # 模拟一次真服务识别
+            return True, f"txt{self.n}"
+
+    class _Tr:
+        def translate(self, text: str) -> tuple[bool, str]:
+            return True, "译文"
+
+    def _run(self, cost_s: float) -> tuple[RecognitionPipeline, int]:
+        """连续说 → 句中短停顿（触发 silence 草稿）→ 继续说 → 句尾静音（定稿）。"""
+        rec = self._SlowRec(cost_s)
+        pipe = RecognitionPipeline(rec, self._Tr(), draft=DraftConfig(enabled=True))
+        pipe.set_on_text(lambda o, t, u: None)
+        seq = tone_blocks(120) + silence_blocks(8) + tone_blocks(60) + silence_blocks(35)
+        for block in seq:
+            pipe.feed_block(block)
+            pipe.step()
+        while pipe.step():
+            pass
+        return pipe, rec.n
+
+    def test_slow_service_skips_drafts_that_cannot_be_earlier(self) -> None:
+        """一次识别比提前量还慢：停顿草稿就是纯成本，必须省掉（不占 worker、不拖定稿）。"""
+        pipe, rec_total = self._run(0.20)
+        assert pipe.draft_skipped >= 1
+        # 3 次 = 定稿 1 次 + 唯一那条「探针」草稿 + 连续说话那条有价值草稿
+        assert rec_total <= 3
+
+    def test_fast_service_still_shows_silence_drafts(self) -> None:
+        """识别快过提前量时不该省：那时草稿确实能更早出字。"""
+        pipe, _ = self._run(0.02)
+        assert pipe.draft_skipped == 0
+        assert pipe.draft_calls >= 2
+
+    def test_probe_learns_cost_then_gates(self) -> None:
+        """没测过耗时前先放一条探针；学会之后才判断，绝不一上来就猜阈值。"""
+        rec = self._SlowRec(0.2)
+        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=True))
+        assert pipe.last_rec_cost_s is None  # 还没调过
+        pipe._enqueue_draft(
+            Utterance(
+                samples=np.zeros(3200, dtype=np.float32),
+                start_s=0.0,
+                end_s=0.2,
+                is_draft=True,
+                utt_id=1,
+                draft_lead_s=0.15,
+                draft_trigger="silence",
+            )
+        )
+        assert pipe.step()  # 探针放行
+        assert pipe.last_rec_cost_s is not None and pipe.last_rec_cost_s >= 0.15
+
+    def test_timeout_drafts_are_never_gated(self) -> None:
+        """连续说话触发的草稿提前量大，慢服务也照送（这才是「边说边出」的主力）。"""
+        rec = self._SlowRec(0.2)
+        pipe = RecognitionPipeline(rec, None, draft=DraftConfig(enabled=True))
+        pipe._enqueue_draft(
+            Utterance(
+                samples=np.zeros(3200, dtype=np.float32),
+                start_s=0.0,
+                end_s=0.2,
+                is_draft=True,
+                utt_id=2,
+                draft_lead_s=0.15,
+                draft_trigger="timeout",
+            )
+        )
+        assert pipe.step()
+        assert pipe.draft_calls == 1 and pipe.draft_skipped == 0
+
+
+class TestDraftLeadStamp:
+    """草稿要自带「比预计定稿早多少、由什么触发」，管道才能判断值不值得送。"""
+
+    def test_silence_draft_carries_small_lead(self) -> None:
+        seg = Segmenter(draft=DraftConfig(enabled=True, silence_ms=150, max_s=99.0))
+        got: list[Utterance] = []
+        for block in tone_blocks(120) + silence_blocks(20):
+            seg.feed(block)
+            got += seg.pop_drafts()
+        assert len(got) == 1
+        assert got[0].draft_trigger == "silence"
+        assert got[0].draft_lead_s == pytest.approx(0.300 - 0.150)
+
+    def test_timeout_draft_carries_remaining_speech_lead(self) -> None:
+        cfg = SegmenterConfig(max_utterance_s=3.0)
+        seg = Segmenter(cfg, draft=DraftConfig(enabled=True, silence_ms=9999, max_s=1.0))
+        got: list[Utterance] = []
+        for block in tone_blocks(150):  # 连续说 1.5s
+            seg.feed(block)
+            got += seg.pop_drafts()
+        assert got and all(d.draft_trigger == "timeout" for d in got)
+        assert got[0].draft_lead_s == pytest.approx(3.0 - 1.0, abs=0.02)
