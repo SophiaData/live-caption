@@ -60,6 +60,41 @@ def load_pref(key: str, default: str | None = None) -> str | None:
     return row[0] if row else default
 
 
+_TRUE_WORDS = ("1", "true", "yes", "on")
+_FALSE_WORDS = ("0", "false", "no", "off")
+
+
+def save_bool_pref(key: str, value: bool) -> None:
+    """存一条布尔偏好（文本列用 "1"/"0"）。"""
+    save_pref(key, "1" if value else "0")
+
+
+def load_bool_pref(key: str, default: bool) -> bool:
+    """读一条布尔偏好；没存过或值看不懂时用默认值（坏值不该让软件起不来）。"""
+    raw = load_pref(key)
+    if raw is None:
+        return default
+    text = raw.strip().lower()
+    if text in _TRUE_WORDS:
+        return True
+    if text in _FALSE_WORDS:
+        return False
+    logger.warning("偏好 %s 的值看不懂（%r），按默认值 %s 处理", key, raw, default)
+    return default
+
+
+def load_int_pref(key: str, default: int) -> int:
+    """读一条整数偏好；没存过或不是整数时用默认值。"""
+    raw = load_pref(key)
+    if raw is None:
+        return default
+    try:
+        return int(str(raw).strip())
+    except ValueError:
+        logger.warning("偏好 %s 不是整数（%r），按默认值 %s 处理", key, raw, default)
+        return default
+
+
 def save_config(slot: str, base_url: str, model: str, api_key: str) -> None:
     """存配置（密钥进钥匙串，其余进 SQLite）。"""
     _init_db()

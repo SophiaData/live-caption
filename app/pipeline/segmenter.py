@@ -7,12 +7,18 @@
 - 句长下限 min_utterance_s：太短的（咳嗽等）丢弃
 
 音乐背景重的场景会切不准——这是已知权衡（见 tech-debt TD-1），
-后续观察效果再决定是否升级专业 VAD。
+后续观察效果再决定是否升级专业 VADs。
+
+边说边出（Issue #17）：整句判定结束之前，可按更短的静音间隔（或最长时长兜底）
+先吐出一个「草稿片段」（prefix of 当前句），让人还在说话时字幕就有内容。
+参数集中在 DraftConfig，默认关闭——引擎层保持与 Issue #17 之前完全一致的行为，
+产品层（设置面板 + 偏好）默认打开，详见 architecture.md 决策 11。
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 
 import numpy as np
@@ -33,13 +39,43 @@ class SegmenterConfig:
 
 
 @dataclass(frozen=True)
+class DraftConfig:
+    """边说边出（草稿字幕）的子窗口参数。
+
+    enabled=False 时断句器行为与 Issue #17 之前逐字节一致（不产出任何草稿）。
+    参数都是字段而不是代码里的魔法数，可由偏好/设置覆盖（Issue #17 设计约束）。
+    """
+
+    enabled: bool = False
+    silence_ms: int = 150  # 句内更短的静音间隔 → 先出草稿（必须 < min_silence_ms）
+    max_s: float = 1.2  # 连续说话没有停顿时的兜底：每说这么久强制补一次草稿
+    min_s: float = 0.4  # 短于这个时长不值得调用识别（防咳嗽烧配额）
+    max_per_utterance: int = 3  # 单句最多补几次草稿（成本上限，约多 2~4 倍调用）
+    # 一条草稿最多送这么长的音频。没有这个上限，草稿会一路长到整句那么长，
+    # 一次调用就和定稿一样贵：真服务实测（LIVE 第 4 轮）一条 2.5s 的草稿把整句
+    # 定稿的排队顶到 6.35s。截断成开头一段，字照样先出，占用有上界。
+    max_window_s: float = 1.5
+
+
+@dataclass(frozen=True)
 class Utterance:
-    """切出的一句话（含原始采样与起止时间，单位秒）。"""
+    """切出的一句话（含原始采样与起止时间，单位秒）。
+
+    utt_id / is_draft 为 Issue #17 新增：同一句的草稿与定稿共享 utt_id，
+    显示层据此把草稿与定稿钉在同一行，并丢弃迟到的旧草稿。
+    """
 
     samples: np.ndarray
     start_s: float
     end_s: float
     trailing_silence_s: float = 0.0  # 句尾用于确认「说完」的静音时长（延迟观测用，Issue #16）
+    utt_id: int = 0  # 句标识（>0 由 Segmenter 递增分配；同一句的草稿与定稿同号）
+    is_draft: bool = False  # True=句中子窗口草稿，False=整句定稿
+    # 草稿专用（Issue #17）：这条草稿比「预计定稿时刻」早几秒、由什么触发。
+    # 停顿触发的提前量天生很小（= 整句静音阈值 − 草稿静音阈值）：若一次识别比它还慢，
+    # 这条草稿既换不来更早的字，又会让紧随的定稿多等一次调用 → 管道据此直接跳过。
+    draft_lead_s: float = 0.0
+    draft_trigger: str = ""  # "" / "silence" / "timeout"
 
     @property
     def duration_s(self) -> float:
@@ -52,7 +88,7 @@ class Utterance:
 
 
 class Segmenter:
-    """增量式断句器：喂入 10ms 块，随时取出切完的整句。
+    """增量式断句器：喂入 10ms 块，随时取出切完的整句与可选的草稿片段。
 
     用法：
         seg = Segmenter()
@@ -60,16 +96,62 @@ class Segmenter:
         ...
         for utt in seg.pop_utterances():
             print(utt.start_s, utt.end_s, utt.samples)
+        for d in seg.pop_drafts():   # 仅 DraftConfig(enabled=True) 时会有
+            print(d.duration_s, d.utt_id)
     """
 
-    def __init__(self, config: SegmenterConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: SegmenterConfig | None = None,
+        draft: DraftConfig | None = None,
+    ) -> None:
         self._cfg = config or SegmenterConfig()
+        self._draft: DraftConfig = draft or DraftConfig()
+        self._draft_on: bool = self._draft.enabled  # 运行时开关（设置面板可即时切换）
+        self._draft_lock = threading.Lock()  # 护住开关与待取草稿：音频线程 vs UI 线程
         self._blocks: list[np.ndarray] = []  # 当前句的块
         self._cur_samples: int = 0  # 当前句累计样本数
         self._total_samples_seen = 0  # 全局累计样本数（算时间用）
         self._silence_samples: int = 0  # 句内连续静音样本数
         self._in_speech = False  # 当前是否在说话
         self._completed: list[Utterance] = []  # 已断完等待取走的句
+        self._drafts: list[Utterance] = []  # 待取走的草稿片段（同句只留最新）
+        self._utt_seq: int = 0  # 当前句的 utt_id（说话开始时 +1）
+        self._draft_count: int = 0  # 本句已吐出的草稿次数（成本上限）
+        self._last_draft_s: float = 0.0  # 本句内上次吐草稿时的已说时长
+        self._last_draft_window_s: float = 0.0  # 上次实际送出的音频长度（截断后）
+        self._draft_silence_fired = False  # 本轮静音是否已触发过草稿
+
+    # ---------- 配置访问（供管道与观测层读取） ----------
+
+    @property
+    def config(self) -> SegmenterConfig:
+        return self._cfg
+
+    @property
+    def draft(self) -> DraftConfig:
+        return self._draft
+
+    @property
+    def draft_enabled(self) -> bool:
+        """当前是否产出草稿片段：运行时开关是唯一真相。
+
+        配置里的 `DraftConfig.enabled` 只是初值（引擎默认关、产品默认开）。若这里
+        还跟初值相与，就会出现「先关着启动、之后在设置里勾上，引擎却永远不出草稿」
+        的哑开关——设置面板骗人。
+        """
+        with self._draft_lock:
+            return self._draft_on
+
+    def set_draft_enabled(self, on: bool) -> None:
+        """设置面板即时切换「边说边出」；关闭时清掉未取走的草稿，避免旧片段上屏。
+
+        音频线程可能正在 feed()：草稿状态与开关用同一把锁护住，跨线程切换不撕裂。
+        """
+        with self._draft_lock:
+            self._draft_on = on
+            if not on:
+                self._drafts = []
 
     def feed(self, block: np.ndarray) -> None:
         """喂入一块 float32 单声道音频（大小任意，按样本数算时长）。"""
@@ -80,15 +162,18 @@ class Segmenter:
         if not self._in_speech:
             if is_speech:
                 self._in_speech = True
+                self._utt_seq += 1  # 新句开始：草稿与定稿共用这个号
                 self._cur_samples = n
                 self._silence_samples = 0
                 self._blocks = [block]
+                self._reset_draft_state()
             # 非说话时静默丢弃
         else:
             self._blocks.append(block)
             self._cur_samples += n
             if is_speech:
                 self._silence_samples = 0
+                self._draft_silence_fired = False  # 停顿被打断，可以重新触发草稿
             else:
                 self._silence_samples += n
             # 断句：静音够了 或 句太长了（都按样本数换算）
@@ -96,6 +181,8 @@ class Segmenter:
             cur_s = self._cur_samples / SAMPLE_RATE
             if silence_s >= self._cfg.min_silence_ms / 1000 or cur_s >= self._cfg.max_utterance_s:
                 self._finalize_utterance()
+            else:
+                self._maybe_emit_draft(silence_s, cur_s)
 
         self._total_samples_seen += n
 
@@ -104,6 +191,86 @@ class Segmenter:
         result = self._completed
         self._completed = []
         return result
+
+    def pop_drafts(self) -> list[Utterance]:
+        """取出待显示的草稿片段（返回后清空；关闭草稿时恒为空）。"""
+        with self._draft_lock:
+            result = self._drafts
+            self._drafts = []
+        return result
+
+    def flush(self) -> list[Utterance]:
+        """流结束时强制切出当前句（若正在说话且够长），并取出全部完成句。"""
+        if self._in_speech and self._blocks:
+            self._finalize_utterance()
+        with self._draft_lock:
+            self._drafts = []  # 流末未定稿的草稿不再有意义
+        return self.pop_utterances()
+
+    # ---------- 内部 ----------
+
+    def _reset_draft_state(self) -> None:
+        self._draft_count = 0
+        self._last_draft_s = 0.0
+        self._last_draft_window_s = 0.0
+        self._draft_silence_fired = False
+
+    def _maybe_emit_draft(self, silence_s: float, cur_s: float) -> None:
+        """句子还没判完时，先看要不要先吐一条草稿（Issue #17 的「边说边出」）。
+
+        触发条件（任一）：
+        1) 出现 silence_ms 这么长的停顿（比整句判定更短）——说话人顿了一下；
+        2) 距上次草稿已连续说了 max_s 还没停顿——长句也要边说边补。
+        约束：本句已说时长 >= min_s（太短不值得调用）、单句最多 max_per_utterance 次、
+        音频最长 max_window_s（一次调用的占用有上界，不许顶住紧随的定稿）。
+        """
+        d = self._draft
+        if not self.draft_enabled:
+            return
+        if cur_s < d.min_s or self._draft_count >= d.max_per_utterance:
+            return
+        by_silence = silence_s >= d.silence_ms / 1000 and not self._draft_silence_fired
+        by_timeout = cur_s - self._last_draft_s >= d.max_s
+        if not (by_silence or by_timeout):
+            return
+        if by_silence:
+            # 停顿若继续，整句还要再等 (min_silence − 本阈值) 秒才判定——这就是本条草稿的提前量
+            lead_s = self._cfg.min_silence_ms / 1000 - d.silence_ms / 1000
+            trigger = "silence"
+        else:
+            # 连续说话：最晚到强制切分才定稿，提前量按「还能说多久」算
+            lead_s = max(0.0, self._cfg.max_utterance_s - cur_s)
+            trigger = "timeout"
+        self._last_draft_s = cur_s
+        # 只送这句的开头一段：草稿一路长到整句那么长时，一次调用就和定稿一样贵，
+        # 真服务实测会把紧随的定稿顶出好几秒排队（LIVE 第 4 轮）。
+        window_s = min(cur_s, d.max_window_s)
+        if window_s <= self._last_draft_window_s + 1e-9:
+            if by_silence:
+                self._draft_silence_fired = True
+            return  # 开头一段没再变长：这条草稿带不来新字，不送识别也不顶定稿
+        self._draft_count += 1
+        self._last_draft_window_s = window_s
+        if by_silence:
+            self._draft_silence_fired = True
+        draft = self._snapshot_draft(window_s, lead_s, trigger)
+        with self._draft_lock:  # 与 set_draft_enabled(False) 抢同一把锁，不塞回已清的列表
+            self._drafts.append(draft)
+
+    def _snapshot_draft(self, cur_s: float, lead_s: float, trigger: str) -> Utterance:
+        """把当前句开头 cur_s 秒的采样复制成一条草稿片段（cur_s 已被 max_window_s 限住）。"""
+        samples = np.concatenate(self._blocks).reshape(-1)[: int(round(cur_s * SAMPLE_RATE))]
+        end_s = (self._total_samples_seen + len(self._blocks[-1])) / SAMPLE_RATE
+        return Utterance(
+            samples=samples,
+            start_s=end_s - cur_s,
+            end_s=end_s,
+            trailing_silence_s=0.0,  # 草稿没有「说完」确认，不参与整句延迟锚点
+            utt_id=self._utt_seq,
+            is_draft=True,
+            draft_lead_s=lead_s,
+            draft_trigger=trigger,
+        )
 
     def _finalize_utterance(self) -> None:
         """把当前缓冲的块拼成一句话并存入完成队列；太短则丢弃。"""
@@ -114,10 +281,12 @@ class Segmenter:
         end_s = (self._total_samples_seen + len(self._blocks[-1])) / SAMPLE_RATE
         start_s = end_s - duration
         trailing_silence_s = self._silence_samples / SAMPLE_RATE  # 打点须在复位前取
+        utt_id = self._utt_seq
         self._blocks = []
         self._cur_samples = 0
         self._in_speech = False
         self._silence_samples = 0
+        self._reset_draft_state()
         if duration >= self._cfg.min_utterance_s:
             self._completed.append(
                 Utterance(
@@ -125,12 +294,9 @@ class Segmenter:
                     start_s=start_s,
                     end_s=end_s,
                     trailing_silence_s=trailing_silence_s,
+                    utt_id=utt_id,
                 )
             )
+            with self._draft_lock:  # 定稿已就位：同句未取走的草稿作废
+                self._drafts = [d for d in self._drafts if d.utt_id != utt_id]
         # 太短（咳嗽等）静默丢弃
-
-    def flush(self) -> list[Utterance]:
-        """流结束时强制切出当前句（若正在说话且够长），并取出全部完成句。"""
-        if self._in_speech and self._blocks:
-            self._finalize_utterance()
-        return self.pop_utterances()

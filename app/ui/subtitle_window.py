@@ -23,11 +23,15 @@ MAX_FONT = 48
 MIN_OPACITY = 0.3
 MAX_OPACITY = 1.0
 
+# 草稿态主行用较暗字色，让用户看得出「这句还没定稿」（Issue #17）
+DRAFT_COLOR = "#9aa3ad"
+FINAL_COLOR = "white"
+
 
 class SubtitleWindow(QWidget):
     """置顶双语字幕窗：可拖动、透明度/字号可调、记住位置。"""
 
-    text_arrived = Signal(str, str)  # (原文, 译文)
+    text_arrived = Signal(str, str, int, bool)  # (原文, 译文, 句号, 是否草稿)
     position_changed = Signal(int, int)  # (x, y) 拖动结束时发出，供持久化
 
     def __init__(self) -> None:
@@ -47,6 +51,9 @@ class SubtitleWindow(QWidget):
         self._font_size = 30
         self._opacity = 0.9
         self._drag_offset: QPoint | None = None
+        # 边说边出（Issue #17）：这一行现在属于哪一句、是草稿还是定稿
+        self._is_draft = False
+        self._finalized_id = 0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 8, 16, 8)
@@ -101,8 +108,9 @@ class SubtitleWindow(QWidget):
         orig_fs = max(MIN_FONT, int(fs * 0.6))
         alpha = int(255 * self._opacity)
         bg_alpha = int(alpha * 0.75)
+        color = DRAFT_COLOR if self._is_draft else FINAL_COLOR
         self._trans_label.setStyleSheet(
-            f"QLabel {{ color: white; font-size: {fs}px; font-weight: bold;"
+            f"QLabel {{ color: {color}; font-size: {fs}px; font-weight: bold;"
             f" background-color: rgba(0,0,0,{bg_alpha}); border-radius: 10px;"
             f" padding: 8px 14px; }}"
         )
@@ -164,13 +172,40 @@ class SubtitleWindow(QWidget):
             self.position_changed.emit(x, y)  # 通知持久化
             event.accept()
 
-    # ---------- 文本 ----------
+    # ---------- 文本（同一行原地替换，Issue #17） ----------
 
-    def show_text(self, original: str, translation: str) -> None:
-        """线程安全：任意线程可调。"""
-        self.text_arrived.emit(original, translation)
+    def show_text(
+        self, original: str, translation: str, utt_id: int = 0, is_draft: bool = False
+    ) -> None:
+        """线程安全：任意线程可调。
 
-    def _apply_text(self, original: str, translation: str) -> None:
+        草稿与定稿都写进同一对标签——本函数永不新增字幕条目；
+        同一句（utt_id）的定稿一定覆盖草稿。
+        """
+        self.text_arrived.emit(original, translation, int(utt_id), bool(is_draft))
+
+    def entry_count(self) -> int:
+        """窗口里挂着的字幕条数（防重复字幕的核心不变量：恒为 2）。"""
+        return len(self.findChildren(QLabel))
+
+    def displayed(self) -> tuple[str, str]:
+        """(主行文本, 辅行文本)：读真实上屏内容，供测试与自检。"""
+        return self._trans_label.text(), self._orig_label.text()
+
+    def _apply_text(self, original: str, translation: str, utt_id: int, is_draft: bool) -> None:
+        if is_draft:
+            # 迟到的旧草稿不得覆盖已定稿的那一行（同句或更早句的草稿一律丢弃）
+            if utt_id <= self._finalized_id:
+                return
+            self._is_draft = True
+            self._trans_label.setText(original)
+            self._orig_label.setText("")
+            self._orig_label.setVisible(False)
+            self._refresh_styles()
+            return
+        if utt_id:
+            self._finalized_id = max(self._finalized_id, utt_id)
+        self._is_draft = False
         if translation:
             self._trans_label.setText(translation)
             self._orig_label.setText(original)
@@ -179,3 +214,4 @@ class SubtitleWindow(QWidget):
             self._trans_label.setText(original)
             self._orig_label.setText("")
             self._orig_label.setVisible(False)
+        self._refresh_styles()
