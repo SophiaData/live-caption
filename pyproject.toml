@@ -25,6 +25,7 @@ dev = [
     "pytest-qt",
     "pytest-mock",
     "pyinstaller",
+    "coverage",
 ]
 
 [tool.setuptools.packages.find]

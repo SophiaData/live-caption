@@ -1,5 +1,5 @@
 # 质量门：format + lint + 类型检查 + 测试，一条命令全跑
-.PHONY: setup check run
+.PHONY: setup check coverage run
 
 PYTHON ?= python3.12
 
@@ -14,6 +14,10 @@ check:
 	.venv/bin/ruff check app tests
 	.venv/bin/mypy app
 	.venv/bin/pytest -q
+
+coverage:
+	.venv/bin/coverage run --branch -m pytest
+	.venv/bin/coverage report --include='app/*'
 
 run:
 	.venv/bin/python -m app.main
