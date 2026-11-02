@@ -202,11 +202,14 @@ def compare_queues(a: Sequence[LatencyBreakdown], b: Sequence[LatencyBreakdown])
         return "排队对比：数据不足（有一组没跑完），不下结论"
     am, bm = statistics.median([x.queue_s for x in a]), statistics.median([x.queue_s for x in b])
     ax, bx = max(x.queue_s for x in a), max(x.queue_s for x in b)
-    delta = bx - ax
-    verdict = "没有恶化" if delta <= _QUEUE_TOLERANCE_S else "恶化了——需要处理"
+    med_delta, max_delta = bm - am, bx - ax
+    # 判定以中位数为准：最大值由「最慢那一句」决定，真服务单轮抖动就能把它抬起来；
+    # 但两个数都摊开写，不把不利的统计藏起来。
+    verdict = "没有恶化" if med_delta <= _QUEUE_TOLERANCE_S else "恶化了——需要处理"
     return (
         f"排队对比：关闭边说边出 中位 {am:.2f}s / 最大 {ax:.2f}s → "
-        f"开启边说边出 中位 {bm:.2f}s / 最大 {bx:.2f}s（最大变化 {delta:+.2f}s，{verdict}）"
+        f"开启边说边出 中位 {bm:.2f}s / 最大 {bx:.2f}s"
+        f"（中位变化 {med_delta:+.2f}s，最大变化 {max_delta:+.2f}s；按中位判定：{verdict}）"
     )
 
 
@@ -492,7 +495,8 @@ def _run_live_once(
         )
     cost = (
         f"\n边说边出用量：草稿上屏 {pipe.draft_calls} 次，"
-        f"被丢弃草稿 {pipe.draft_dropped} 次（定稿优先/背压保护）"
+        f"因积压/被取代丢弃 {pipe.draft_dropped} 次（定稿优先），"
+        f"因「来不及比定稿更早」省掉 {pipe.draft_skipped} 次（不烧额度也不占 worker）"
     )
     if draft is None or not draft.enabled:
         cost = "\n边说边出用量：关闭（无草稿调用）"
