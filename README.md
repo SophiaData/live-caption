@@ -30,7 +30,7 @@ make check-arch    # 打包前：构建用的 Python 必须是 arm64（非 macOS
 make verify-arch   # 打包后：逐个校验 .app 里的二进制架构，不合格即失败
 ```
 
-产物名带版本号与**实测出来的**架构，例如 `live-caption-0.1.0-macos-arm64.dmg`。
+产物名带版本号与**实测出来的**架构，例如 `live-caption-0.2.0-macos-arm64.dmg`。
 
 包只做免费的 **ad-hoc 签名**，没有苹果签名与公证（那需要 $99/年 的 Apple Developer 账号）。所以用户首次打开时，如果提示「无法验证开发者」，到「系统设置 → 隐私与安全性」点「仍要打开」即可。
 

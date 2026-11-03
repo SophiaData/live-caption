@@ -1,6 +1,6 @@
 [project]
 name = "live-caption"
-version = "0.1.0"
+version = "0.2.0"
 description = "实时双语字幕：把电脑正在播放的声音实时变成原文+译文悬浮字幕"
 requires-python = ">=3.12"
 dependencies = [
