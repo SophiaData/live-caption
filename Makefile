@@ -1,9 +1,24 @@
 # 质量门：format + lint + 类型检查 + 测试，一条命令全跑
-.PHONY: setup check coverage run latency latency-live
+.PHONY: setup check coverage run latency latency-live check-arch verify-arch
 
 PYTHON ?= python3.12
 
-setup:
+# Issue #20：构建架构。老板已定只做 Apple Silicon——不做 Intel，不做 universal2。
+ARCH ?= arm64
+APP ?= dist/live-caption.app
+
+# 构建前硬门：macOS 上构建解释器必须是 arm64，否则打出来的包在 Apple 芯片上跑不动。
+# 只在 darwin 生效（Linux/Windows 的 CI 不受影响，会打印「跳过」）。
+# 确需 Intel 调试包（产物不可发布）才用 ALLOW_INTEL=1 显式绕过，绕过会被打印出来。
+check-arch:
+	"$(PYTHON)" -m app.release.arch interpreter --require $(ARCH)
+
+# 构建后硬门：逐个校验 .app 里的二进制（主程序只有 arm64 + 每个 .so/.dylib 含 arm64）。
+# 不合格退出码 1，产物禁止发布；CI 的 build-release 跑的是同一条命令。
+verify-arch:
+	.venv/bin/python -m app.release.arch bundle "$(APP)" --require $(ARCH)
+
+setup: check-arch
 	"$(PYTHON)" -c 'import sys; v=sys.version_info; sys.exit(f"需要 Python 3.12 及以上，当前是 {v.major}.{v.minor}.{v.micro}。请运行：make setup PYTHON=/path/to/python3.12" if v < (3, 12) else 0)'
 	"$(PYTHON)" -m venv .venv
 	.venv/bin/python -m pip install --upgrade pip

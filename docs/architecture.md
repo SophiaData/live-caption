@@ -16,6 +16,7 @@
 
 ## 硬约束（动架构、加依赖前逐条核对）
 
+- **发布产物只支持 Apple Silicon（arm64）+ macOS 13+**（老板 2026-11-03 定：不做 Intel、不做 universal2）。这条由机器保证，不是文档承诺：构建前解释器门 + spec 守卫 + 构建后产物架构门，见 ADR 18/19 与 `make check-arch` / `make verify-arch`
 - 依赖白名单制：新依赖必须在下表登记用途与理由；无理由不引入
 - 黑名单：不引入任何需要编译环境的重依赖（构建机之外）
 - **例外（2026-10-22 老板裁决）**：允许引入 faster-whisper（本地识别，可选方案）。理由：用户不愿注册云端账号时，本地识别是唯一免费可用路径；作为「可选项」与云端配置并存，不改变「用户自配模型」主定位。模型文件按需下载，不进安装包
@@ -57,6 +58,8 @@
 | 15 | 2026-11-03 | 观测扩展只加不改：草稿时刻登记进定稿那条记录的 `draft_shown_at`，`STAGES` 五段语义与行格式逐字保留；报告把「说完→原文出现」与「说完→译文出现」分开输出 | Issue #17 硬性禁止「不动 #16 引入的时间戳语义」；实测原文 ≈2s 而译文 ≈5s，混成一个 total 就看不出产品到底哪一头不达标 | 新增一个 STAGES 元素（会破坏「打点齐全才算完成句」的既有判定与完成数口径）；用 total 代表一切（看不清达标的到底是哪一头） | 
 | 16 | 2026-11-03 | 草稿只在**大概率比定稿更早出现**时才送识别：断句器给每条草稿标 `draft_lead_s`（比预计定稿早多少秒）与 `draft_trigger`，管道按实测识别耗时（滑动均值）判断——提前量不够就主动省掉，不烧额度也不占 worker | 真服务实测 `make latency LIVE=1 --draft` 第二遍抓到排队恶化：关闭 中位 0.05s → 开启 中位 1.68s。根因是停顿触发的草稿天生只比整句判定早 0.15s（整句静音阈值 − 草稿静音阈值），而一次识别要 0.2~1.8s：这类草稿换不来更早的字，却让紧随的定稿多等一次调用，过切（TD-9）又把放大效应吃进累计延迟 | 写死一个「识别必须快于 X 毫秒才出草稿」的魔法阈值（服务一变就错）；或给草稿单独开线程池（违反「不得改变现有线程模型」）；或干脆取消停顿触发（连续说话的场景就没用了） | 
 | 17 | 2026-11-03 | 整句一旦排起队就**自动停补草稿**，队列清空后恢复（`draft_paused`）；管道计时时钟可注入 | 第 5 轮真服务实测（同机同模型、单跑不并发）：关闭 排队中位 0.03s → 开启 2.37s。单 worker 串行 + 调用不可取消，草稿在途时紧随的整句只能等——所以「追不上了就先不加戏」必须是运行时自适应规则，而不是靠人记得关开关。时钟可注入是因为原有用例靠 `time.sleep` 造慢服务，CI 上 sleep 精度不够会飘（macos-14 实测红过一次） | 让草稿和定稿抢同一条队列的先后顺序（改不动排队本质）；给草稿单独开线程（违反「不得改变现有线程模型」）；用墙钟 sleep 写慢服务用例（CI 飘） | 
+| 18 | 2026-11-03 | Apple Silicon 架构由**三道机器门**保证（Issue #20）：① `make check-arch` 断言构建解释器是 arm64（非 darwin 自动跳过，`ALLOW_INTEL=1` 只能显式绕过且打印「已绕过」）② `live-caption.spec` 顶部 `guard_interpreter_for_build()`——绕过 make 直接跑 pyinstaller 也一样中止 ③ `make verify-arch` 逐个校验 `.app`：主程序必须**只有 arm64**，每个 `.so`/`.dylib` 必须**含 arm64**（universal2 的 Qt 轮子含 arm64 即放行；认不出架构的文件算不合格，不静默跳过） | 以前架构全靠 `runs-on: macos-14` 这一行碰运气，流水线里 grep 不到任何架构断言，runner 一换型就静默产出「装得上、跑不动」的 Intel 包。判读用**自己解析 Mach-O 文件头**（`app/release/macho.py`，只读头部几十字节）而不是调 `lipo`：门要能在任何机器上用合成字节做单元测试，也不把发布判定绑在 Xcode 工具链上；CI 仍原样打印 `lipo -archs` 作交叉印证的发布证据（本机实测两边结论一致）。产物名里的架构取自 `lipo` 对**成品主程序**的实测结果，不写死字符串，名字不会骗人 | 只靠 `runs-on` 选型号（无保证）；用 `lipo`/`otool` 实现门（绑 Xcode、测不了）；把 "arm64" 写进产物名（产物是 Intel 也照样叫 arm64）；认不出架构就跳过（等于给门开后门） | 
+| 19 | 2026-11-03 | PyInstaller 显式 `target_arch="arm64"`，`codesign_identity` 保持 None，签名走 CI 里独立的 ad-hoc 步骤 `codesign --force --deep --sign -` | 老板已定只做 Apple Silicon：`target_arch="arm64"` 让 PyInstaller 把启动器 thin 成 arm64，拿不到 arm64 切片就直接报错（`target_arch=None` 的语义正是「跟着构建机走」）。项目没有 Apple Developer 身份，用 `codesign_identity` 会假装签名；ad-hoc 是 Apple 芯片上 arm64 二进制能跑起来的最低要求。**公证（notarization）不在范围**：要 $99/年 账号，`spctl --assess` 实测仍 rejected，用户首次打开需「仍要打开」（见 TD-11） | universal2（老板明确不做）；`target_arch=None`（=现状的问题本身）；在 spec 里填 `codesign_identity`（没有该身份，且会把发布绑到某个证书上） | 
 
 ## 目录结构约定
 
@@ -66,6 +69,7 @@ live-caption/
 │   ├── capture/          #   音频捕获（Mac/Win 设备抽象）
 │   ├── pipeline/          #   断句→识别→翻译管道（纯逻辑，可测；含 trace.py 延迟观测缝）
 │   ├── bench/             #   make latency 基准（假时钟假件 + LIVE 真服务，不进产品运行时路径）
+│   ├── build/             #   make check-arch / verify-arch 的架构门（Mach-O 解析，Issue #20；不进产品运行时路径）
 │   ├── providers/        #   OpenAI 兼容协议客户端（asr/translate 两槽位）
 │   ├── ui/               #   PySide6 界面（悬浮窗/配置向导/托盘）
 │   └── config/           #   SQLite 配置 + 钥匙串

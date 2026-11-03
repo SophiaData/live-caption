@@ -22,6 +22,11 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: 架构断言（轻量：解释器必须是 arm64，Issue #20）
+        # 不打包也能挡住「runner 换成 Intel 之后静默产出跑不动的包」。
+        # 非 macOS 平台会打印「跳过」，不会因此变红。
+        run: make check-arch PYTHON=python
+
       - name: 建虚拟环境并装依赖（与 build-release 一致）
         run: |
           python -m venv .venv

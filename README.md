@@ -19,6 +19,23 @@ make run
 
 首次启动会引导配置「识别服务」和「翻译服务」（密钥存系统钥匙串）。
 
+## 打包发布（macOS）
+
+**系统要求：需要 Apple 芯片（M1 及以上），macOS 13+；Intel Mac 不支持。**
+
+本项目只做 Apple Silicon（不做 Intel、不做 universal2），并且「包是不是 arm64」由两道机器门保证，不靠构建机的型号碰运气：
+
+```bash
+make check-arch    # 打包前：构建用的 Python 必须是 arm64（非 macOS 自动跳过）
+make verify-arch   # 打包后：逐个校验 .app 里的二进制架构，不合格即失败
+```
+
+产物名带版本号与**实测出来的**架构，例如 `live-caption-0.1.0-macos-arm64.dmg`。
+
+包只做免费的 **ad-hoc 签名**，没有苹果签名与公证（那需要 $99/年 的 Apple Developer 账号）。所以用户首次打开时，如果提示「无法验证开发者」，到「系统设置 → 隐私与安全性」点「仍要打开」即可。
+
+确需在 Intel/Rosetta 解释器上打一个只能本地调试的包，才用 `ALLOW_INTEL=1 make setup`——它会明确打印「已绕过」，这样打出来的包不能对外发布。
+
 ## 开发
 
 项目仅支持 Python 3.12 及以上版本；Python 3.9 不在支持范围内。
