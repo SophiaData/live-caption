@@ -39,10 +39,22 @@ from app.release.macho import (
 
 #: 动态库后缀：`.app` 里带这些后缀的文件都必须含要求的架构
 LIBRARY_SUFFIXES: Final[tuple[str, ...]] = (".so", ".dylib")
+#: 本项目的发布架构（老板 2026-11-03 定：只做 Apple Silicon）
+DEFAULT_REQUIRE: Final = "arm64"
 _ALLOW_INTEL_ENV: Final = "ALLOW_INTEL"
-#: 显式绕过时这些值不算绕过（ALLOW_INTEL=0 不等于允许 Intel）
-_FALSY_ENV_VALUES: Final[frozenset[str]] = frozenset({"", "0", "false", "no"})
+#: 只有这些取值算显式绕过；其余（含写错的 off/0）一律不放行，绕过必须是明确意图
+_ALLOW_INTEL_VALUES: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
 _INTEL_MACHINES: Final[frozenset[str]] = frozenset({"x86_64", "x86_64h", "i386"})
+
+
+def _require_note(require: str) -> str:
+    """判据被改成非发布架构时附的一行：让「反向验证门有没有牙」不被当成「放行」。"""
+    if require == DEFAULT_REQUIRE:
+        return ""
+    return (
+        f"\n⚠️ 判据被改成 {require}：本项目的发布架构是 {DEFAULT_REQUIRE}（Issue #20）。"
+        "改判据只用于验证这道门真的有牙，不能用来放行发布产物。"
+    )
 
 
 @dataclass(frozen=True)
@@ -87,9 +99,9 @@ class GateError(Exception):
 
 
 def allow_intel_from_env(env: Mapping[str, str] | None = None) -> bool:
-    """读 `ALLOW_INTEL`：非空且不等于 0/false/no 才算显式绕过。"""
+    """读 `ALLOW_INTEL`：只有 1/true/yes/on 算显式绕过；写错的值（off、0、空）一律不放行。"""
     environ = os.environ if env is None else env
-    return environ.get(_ALLOW_INTEL_ENV, "").strip().lower() not in _FALSY_ENV_VALUES
+    return environ.get(_ALLOW_INTEL_ENV, "").strip().lower() in _ALLOW_INTEL_VALUES
 
 
 def inspect_interpreter(
@@ -114,7 +126,8 @@ def inspect_interpreter(
         return InterpreterVerdict(
             ok=True,
             skipped=False,
-            message=f"✅ 构建解释器合格：{executable} → {machine}（要求 {require}）",
+            message=f"✅ 构建解释器合格：{executable} → {machine}（要求 {require}）"
+            + _require_note(require),
         )
     note = "Intel/Rosetta" if machine in _INTEL_MACHINES else machine
     if allow_intel:
@@ -126,7 +139,17 @@ def inspect_interpreter(
                 f"要求是 {require}。\n"
                 "这样打出来的包**不能在 Apple 芯片上原生运行**，只能用于本地调试；"
                 f"发布产物必须由 {require} 解释器打包，CI 里禁止带 {_ALLOW_INTEL_ENV}。\n"
-                f"解释器：{executable}"
+                f"解释器：{executable}" + _require_note(require)
+            ),
+        )
+    if require != DEFAULT_REQUIRE:
+        # 判据被人为反向（只用于验证这道门有牙）：说清「不匹配」，不要编产品结论
+        return InterpreterVerdict(
+            ok=False,
+            skipped=False,
+            message=(
+                f"❌ 架构断言不通过：解释器是 {machine}（{note}），当前判据要求 {require}。\n"
+                f"（当前解释器：{executable}）" + _require_note(require)
             ),
         )
     return InterpreterVerdict(
@@ -269,6 +292,9 @@ def format_report(report: BundleReport) -> str:
         f"内嵌动态库（.so / .dylib 全量）共 {len(report.libraries)} 个，"
         f"逐个必须包含 {report.require}：",
     ]
+    note = _require_note(report.require).strip("\n")
+    if note:
+        lines.insert(1, note)
     lines.extend(_format_item(item) for item in report.libraries)
     problems = report.problems
     if problems:

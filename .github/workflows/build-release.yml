@@ -88,8 +88,19 @@ jobs:
           BASE='${{ steps.naming.outputs.base }}'
           cd dist && zip -qry "${BASE}-app.zip" live-caption.app
 
-      - name: 校验打包后的产物架构没变（DMG/zip 用的还是刚才那份 .app）
-        run: make verify-arch
+      - name: 解包复验（对用户真正下载的那两份再过一次门）
+        run: |
+          BASE='${{ steps.naming.outputs.base }}'
+          echo "== zip 里的 .app =="
+          TMP=$(mktemp -d)
+          unzip -q "dist/${BASE}-app.zip" -d "$TMP"
+          .venv/bin/python -m app.release.arch bundle "$TMP/live-caption.app" | tail -3
+          echo "== DMG 里挂载的 .app =="
+          MNT=$(hdiutil attach "dist/${BASE}.dmg" -nobrowse -readonly | tail -1 | awk '{print $NF}')
+          echo "挂载点：$MNT"
+          .venv/bin/python -m app.release.arch bundle "$MNT/live-caption.app" | tail -3
+          lipo -archs "$MNT/live-caption.app/Contents/MacOS/live-caption"
+          hdiutil detach "$MNT"
 
       - name: 上传构建产物（即使不发布也保留）
         uses: actions/upload-artifact@v4

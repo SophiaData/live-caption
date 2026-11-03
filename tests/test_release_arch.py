@@ -271,8 +271,13 @@ def test_interpreter_gate_require_is_the_judgement_itself() -> None:
         ({}, False),
         ({"ALLOW_INTEL": "1"}, True),
         ({"ALLOW_INTEL": "true"}, True),
+        ({"ALLOW_INTEL": "YES"}, True),
+        ({"ALLOW_INTEL": " on "}, True),
         ({"ALLOW_INTEL": "0"}, False),
         ({"ALLOW_INTEL": ""}, False),
+        ({"ALLOW_INTEL": "off"}, False),  # 写错方向的值不许当成绕过
+        ({"ALLOW_INTEL": "false"}, False),
+        ({"OTHER": "1"}, False),
     ],
 )
 def test_allow_intel_env_reading(env: dict[str, str], expected: bool) -> None:
@@ -443,3 +448,66 @@ def test_library_files_sorted_and_relative(tmp_path: Path) -> None:
     rels = [str(path.relative_to(bundle)) for path in arch_gate.library_files(bundle)]
     assert rels == sorted(rels)
     assert len(rels) == 3
+
+
+# ------------------------------------------------- 接线：门必须真的被流水线与脚本叫到
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _read(relative: str) -> str:
+    return (REPO_ROOT / relative).read_text(encoding="utf-8")
+
+
+def test_makefile_wires_both_gates() -> None:
+    """`make check-arch` / `make verify-arch` 真的叫到门，且 `setup` 先过架构门。"""
+    makefile = _read("Makefile")
+    assert "setup: check-arch" in makefile
+    assert "-m app.release.arch interpreter" in makefile
+    assert "-m app.release.arch bundle" in makefile
+    assert "check-arch" in makefile.split(".PHONY:")[1].splitlines()[0]
+
+
+def test_spec_guards_interpreter_and_declares_arm64() -> None:
+    """打包脚本必须自己叫守卫（绕过 make 直接 pyinstaller 也得中止），并显式声明 arm64。"""
+    spec = _read("live-caption.spec")
+    assert "from app.release.arch import guard_interpreter_for_build" in spec
+    assert "guard_interpreter_for_build()" in spec
+    assert 'target_arch="arm64"' in spec
+    assert "target_arch=None" not in spec  # None 的语义就是「跟着构建机碰运气」
+    assert "codesign_identity=None" in spec  # 没有 Developer 身份，不假装签名
+
+
+def test_build_release_pipeline_calls_gates_in_order() -> None:
+    """发布流水线：解释器门在打包前、产物门在打包后、签名与复验在打包中段。"""
+    workflow = _read(".github/workflows/build-release.yml")
+    order = [
+        workflow.index("make check-arch"),
+        workflow.index("pyinstaller live-caption.spec"),
+        workflow.index("make verify-arch"),
+        workflow.index("codesign --force --deep --sign -"),
+        workflow.index("spctl --assess"),
+    ]
+    assert order == sorted(order), f"流水线步骤顺序不对：{order}"
+    # CI 不许带绕过：注释里提一句「不给 ALLOW_INTEL」可以，出现真正的赋值不行
+    assert "ALLOW_INTEL=1" not in workflow
+    assert "\n          ALLOW_INTEL" not in workflow
+    assert "hdiutil attach" in workflow  # 发出去的 DMG 里那份也要复验
+    assert 'unzip -q "dist/${BASE}-app.zip"' in workflow
+
+
+def test_pr_check_has_lightweight_arch_assertion() -> None:
+    """PR 门：不打包也要断言解释器架构（挡住 Intel runner）。"""
+    workflow = _read(".github/workflows/pr-check.yml")
+    assert "make check-arch" in workflow
+
+
+def test_docs_state_apple_silicon_only_and_notarization_gap() -> None:
+    """README/台账要写明系统要求与「未公证」这个真实限制，不许口径漂移。"""
+    readme = _read("README.md")
+    assert "Apple 芯片" in readme and "Intel Mac 不支持" in readme
+    assert "macOS 13" in readme
+    changelog = _read("CHANGELOG.md")
+    assert "spctl" in changelog and "rejected" in changelog
+    debt = _read("docs/tech-debt.md")
+    assert "TD-11" in debt and "公证" in debt
