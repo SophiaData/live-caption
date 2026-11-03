@@ -12,7 +12,9 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-14  # Apple Silicon runner；如需 Intel 改 macos-13
+    # Apple Silicon runner。Issue #20：产物是不是 arm64，不再靠这一行的选择碰运气——
+    # 构建前有解释器架构门、构建后有产物架构门，两道都会硬失败；产物名取自实测架构。
+    runs-on: macos-14
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -27,6 +29,10 @@ jobs:
           python -m venv .venv
           .venv/bin/pip install -e ".[dev]"
 
+      - name: 构建前架构门（解释器必须是 arm64，Issue #20）
+        # 这里不给 ALLOW_INTEL：CI 打的是发布产物，Intel/Rosetta 解释器一律当场失败
+        run: make check-arch PYTHON=.venv/bin/python
+
       - name: 跑质量门（全绿才允许打包）
         run: make check
 
@@ -34,44 +40,99 @@ jobs:
         run: |
           .venv/bin/pyinstaller live-caption.spec --noconfirm
 
+      - name: 构建后架构门（逐个校验产物架构，不合格即失败，Issue #20）
+        run: |
+          echo "== lipo -archs 交叉印证（主程序 + 抽样内嵌库）=="
+          lipo -archs dist/live-caption.app/Contents/MacOS/live-caption
+          find dist/live-caption.app \( -name '*.dylib' -o -name '*.so' \) -print \
+            | head -8 | while read -r f; do printf '%s: ' "$f"; lipo -archs "$f"; done
+          echo
+          echo "== 架构门（全量逐个校验；不合格退出码 1，禁止发布）=="
+          make verify-arch
+
+      - name: ad-hoc 签名（arm64 二进制至少要 ad-hoc 签名才能运行，Issue #20）
+        run: |
+          codesign --force --deep --sign - dist/live-caption.app
+          echo "== codesign -dv =="
+          codesign -dv --verbose=2 dist/live-caption.app 2>&1 || true
+          echo
+          echo "== spctl --assess（如实打印，预期仍 rejected）=="
+          spctl --assess --type execute --verbose dist/live-caption.app 2>&1 || true
+          echo
+          echo "说明：本包只有 ad-hoc 签名，没有 Apple 公证（公证需 Apple Developer 账号 \$99/年，不在本票范围）。"
+          echo "用户首次打开仍需在「系统设置 → 隐私与安全性」点「仍要打开」。"
+
+      - name: 计算产物名（带版本号与实测架构，Issue #20）
+        id: naming
+        run: |
+          VERSION=$(python -c "import pathlib,tomllib;print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          ARCH=$(lipo -archs dist/live-caption.app/Contents/MacOS/live-caption)
+          {
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "arch=$ARCH" >> "$GITHUB_OUTPUT"
+            echo "base=live-caption-$VERSION-macos-$ARCH" >> "$GITHUB_OUTPUT"
+          }
+          echo "产物名：live-caption-$VERSION-macos-$ARCH"
+
       - name: 制作 DMG
         run: |
+          BASE='${{ steps.naming.outputs.base }}'
           mkdir -p dist/dmg
           cp -R dist/live-caption.app dist/dmg/
           ln -s /Applications dist/dmg/Applications
-          hdiutil create -volname "live-caption" -srcfolder dist/dmg -ov -format UDZO dist/live-caption-macos.dmg
+          hdiutil create -volname "live-caption" -srcfolder dist/dmg -ov -format UDZO "dist/${BASE}.dmg"
           ls -lh dist/
 
       - name: 压缩 .app（备用产物）
         run: |
-          cd dist && zip -qry live-caption-macos-app.zip live-caption.app
+          BASE='${{ steps.naming.outputs.base }}'
+          cd dist && zip -qry "${BASE}-app.zip" live-caption.app
+
+      - name: 解包复验（对用户真正下载的那两份再过一次门）
+        run: |
+          BASE='${{ steps.naming.outputs.base }}'
+          echo "== zip 里的 .app =="
+          TMP=$(mktemp -d)
+          unzip -q "dist/${BASE}-app.zip" -d "$TMP"
+          .venv/bin/python -m app.release.arch bundle "$TMP/live-caption.app" | tail -3
+          echo "== DMG 里挂载的 .app =="
+          MNT=$(hdiutil attach "dist/${BASE}.dmg" -nobrowse -readonly | tail -1 | awk '{print $NF}')
+          echo "挂载点：$MNT"
+          .venv/bin/python -m app.release.arch bundle "$MNT/live-caption.app" | tail -3
+          lipo -archs "$MNT/live-caption.app/Contents/MacOS/live-caption"
+          hdiutil detach "$MNT"
 
       - name: 上传构建产物（即使不发布也保留）
         uses: actions/upload-artifact@v4
         with:
-          name: live-caption-macos
+          name: ${{ steps.naming.outputs.base }}
           path: |
-            dist/live-caption-macos.dmg
-            dist/live-caption-macos-app.zip
+            dist/${{ steps.naming.outputs.base }}.dmg
+            dist/${{ steps.naming.outputs.base }}-app.zip
 
       - name: 发布到 GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/live-caption-macos.dmg
-            dist/live-caption-macos-app.zip
+            dist/${{ steps.naming.outputs.base }}.dmg
+            dist/${{ steps.naming.outputs.base }}-app.zip
           generate_release_notes: true
           body: |
             ## live-caption ${{ github.ref_name }}
 
             把电脑正在播放的声音实时变成中英双语悬浮字幕。
 
-            ### 安装（macOS 13+）
-            1. 下载 `live-caption-macos.dmg`
+            ### 系统要求（Issue #20）
+            - 需要 **Apple 芯片（M1 及以上）**；**Intel Mac 不支持**
+            - macOS 13 及以上
+
+            ### 安装
+            1. 下载 `live-caption-${{ steps.naming.outputs.version }}-macos-${{ steps.naming.outputs.arch }}.dmg`
+               （文件名里的 `${{ steps.naming.outputs.arch }}` 是构建流水线实测出来的架构，不是写死的）
             2. 打开 DMG，把 live-caption 拖进「应用程序」
             3. **首次打开若提示「无法验证开发者」**：到「系统设置 → 隐私与安全性」点「仍要打开」
-               （本包未做苹果签名公证，这是正常提示）
+               （本包只有 ad-hoc 签名，未做苹果公证，这是正常提示）
             4. 首次运行按向导配置识别/翻译服务
 
             ### 说明
