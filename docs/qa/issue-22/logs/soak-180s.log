@@ -1,219 +1,182 @@
-2026-11-04 14:39:51,535 INFO repro 点击「开始捕获」
-2026-11-04 14:39:52,076 INFO app.capture.sck_session SCK 流已启动
-2026-11-04 14:39:52,076 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
-2026-11-04 14:39:52,081 INFO repro 点击返回，按钮文字='停止'
-2026-11-04 14:39:52,888 INFO repro 放音 #1 (1s): The quick brown fox jumps over the lazy dog.
-2026-11-04 14:39:56,209 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:39:56,210 INFO repro 字幕｜原文='quick乱发.' 译文=''
-2026-11-04 14:39:56,980 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:39:56,980 INFO repro 字幕｜原文='quick发 chance.' 译文=''
-2026-11-04 14:39:57,352 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:39:57,353 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dog.' 译文=''
-2026-11-04 14:39:58,250 INFO repro 放音 #2 (6s): Live caption turns whatever the computer plays into subtitles.
-2026-11-04 14:39:59,125 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:39:59,126 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dog.' 译文='敏捷的棕色狐狸跳过了懒狗。'
-2026-11-04 14:40:01,424 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:01,424 INFO repro 字幕｜原文='My catch chance.' 译文=''
-2026-11-04 14:40:02,457 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:02,457 INFO repro 字幕｜原文='My cat change whatever.' 译文=''
-2026-11-04 14:40:02,909 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:02,910 INFO repro 字幕｜原文='My cap turns, whatever the computer plays into.' 译文=''
-2026-11-04 14:40:04,288 INFO repro 放音 #3 (12s): Screen capture kit delivers real audio sample buffers to the callback.
-2026-11-04 14:40:04,576 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:04,576 INFO repro 字幕｜原文='My cap turns, whatever the computer plays into.' 译文='我的帽子一转，就跟着电脑播放的内容变。'
-2026-11-04 14:40:04,726 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:04,727 INFO repro 字幕｜原文='看下。' 译文=''
-2026-11-04 14:40:06,299 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:06,300 INFO repro 字幕｜原文='看下。' 译文='Take a look.'
-2026-11-04 14:40:10,416 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:10,417 INFO repro 字幕｜原文='明天吃Q。' 译文=''
-2026-11-04 14:40:10,619 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:10,620 INFO repro 字幕｜原文='Sring touch to take river for your audio sample.' 译文=''
-2026-11-04 14:40:10,888 INFO repro 放音 #4 (19s): Silence in between so the segmenter can close a sentence.
-2026-11-04 14:40:12,796 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:12,797 INFO repro 字幕｜原文='Sring touch to take river for your audio sample.' 译文='轻触以将河流作为你的音频样本。'
-2026-11-04 14:40:13,205 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:13,205 INFO repro 字幕｜原文='这个课吧。' 译文=''
-2026-11-04 14:40:15,179 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:15,180 INFO repro 字幕｜原文='这个课吧。' 译文='这个课吧。'
-2026-11-04 14:40:15,866 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:15,867 INFO repro 字幕｜原文='Silence in between, so the said magic can pose Sunday.' 译文=''
-2026-11-04 14:40:16,888 INFO repro 放音 #5 (25s): The quick brown fox jumps over the lazy dog.
-2026-11-04 14:40:17,813 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:17,814 INFO repro 字幕｜原文='Silence in between, so the said magic can pose Sunday.' 译文='中间的沉默，让所谓的魔法得以装点周日。'
-2026-11-04 14:40:17,946 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:17,946 INFO repro 字幕｜原文='う。' 译文=''
-2026-11-04 14:40:19,752 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:19,753 INFO repro 字幕｜原文='う。' 译文='嗯。'
-2026-11-04 14:40:20,791 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:20,792 INFO repro 字幕｜原文='The quick brown box.' 译文=''
-2026-11-04 14:40:21,185 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:21,186 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dogg.' 译文=''
-2026-11-04 14:40:22,088 INFO repro 放音 #6 (30s): Live caption turns whatever the computer plays into subtitles.
-2026-11-04 14:40:22,831 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:22,831 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dogg.' 译文='敏捷的棕色狐狸跳过了那只懒狗。'
-2026-11-04 14:40:24,701 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:24,701 INFO repro 字幕｜原文='My catchチチゃズ.' 译文=''
-2026-11-04 14:40:27,057 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:27,058 INFO repro 字幕｜原文='Myイ客チチンズ.' 译文=''
-2026-11-04 14:40:27,438 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:27,439 INFO repro 字幕｜原文='My cap and turns, whatever the computer plays.' 译文=''
-2026-11-04 14:40:28,248 INFO repro 放音 #7 (36s): Screen capture kit delivers real audio sample buffers to the callback.
-2026-11-04 14:40:29,158 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:29,158 INFO repro 字幕｜原文='My cap and turns, whatever the computer plays.' 译文='我帽子上的转动，不管电脑播放什么。'
-2026-11-04 14:40:29,292 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:29,292 INFO repro 字幕｜原文='好的。' 译文=''
-2026-11-04 14:40:30,810 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:30,810 INFO repro 字幕｜原文='好的。' 译文='好的，请发送需要翻译的字幕内容。'
-2026-11-04 14:40:32,418 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:32,418 INFO repro 字幕｜原文='秋。' 译文=''
-2026-11-04 14:40:32,994 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:32,995 INFO repro 字幕｜原文='QQ位 all里有三。😊' 译文=''
-2026-11-04 14:40:34,887 INFO repro 放音 #8 (43s): Silence in between so the segmenter can close a sentence.
-2026-11-04 14:40:34,900 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:34,900 INFO repro 字幕｜原文='QQ位 all里有三。😊' 译文='QQ位里共有三个。'
-2026-11-04 14:40:37,907 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:37,908 INFO repro 字幕｜原文='是个课的。' 译文=''
-2026-11-04 14:40:40,035 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:40,035 INFO repro 字幕｜原文='是个课的。' 译文='这是课程用的。'
-2026-11-04 14:40:40,888 INFO repro 放音 #9 (49s): The quick brown fox jumps over the lazy dog.
-2026-11-04 14:40:41,111 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:41,111 INFO repro 字幕｜原文='Silence in between, so the can pose the.' 译文=''
-2026-11-04 14:40:42,878 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:42,879 INFO repro 字幕｜原文='Silence in between, so the can pose the.' 译文='中间的沉默，所以能摆出姿势。'
-2026-11-04 14:40:43,102 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:43,822 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:43,822 INFO repro 字幕｜原文='回 brown box.' 译文=''
-2026-11-04 14:40:46,049 INFO repro 放音 #10 (54s): Live caption turns whatever the computer plays into subtitles.
-2026-11-04 14:40:46,381 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:46,382 INFO repro 字幕｜原文='The quick brown box.' 译文=''
-2026-11-04 14:40:46,688 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:46,688 INFO repro 字幕｜原文='The quick brown boxox jumps over the lazy dogg.😊' 译文=''
-2026-11-04 14:40:48,126 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:48,126 INFO repro 字幕｜原文='The quick brown boxox jumps over the lazy dogg.😊' 译文='敏捷的棕色盒子跳过了懒狗。'
-2026-11-04 14:40:48,973 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:48,974 INFO repro 字幕｜原文='My catching.' 译文=''
-2026-11-04 14:40:52,088 INFO repro 放音 #11 (60s): Screen capture kit delivers real audio sample buffers to the callback.
-2026-11-04 14:40:52,970 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:52,970 INFO repro 字幕｜原文='My catch and change whatever.' 译文=''
-2026-11-04 14:40:54,165 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:54,166 INFO repro 字幕｜原文='My catch turns whatever the computer present.' 译文=''
-2026-11-04 14:40:55,702 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:55,703 INFO repro 字幕｜原文='My catch turns whatever the computer present.' 译文='我抓到的画面就是电脑显示的内容。'
-2026-11-04 14:40:55,878 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:55,879 INFO repro 字幕｜原文='来的。' 译文=''
-2026-11-04 14:40:57,647 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:57,648 INFO repro 字幕｜原文='来的。' 译文='来了。'
-2026-11-04 14:40:57,821 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:40:57,822 INFO repro 字幕｜原文='Please toQ all里有3。😊' 译文=''
-2026-11-04 14:40:58,688 INFO repro 放音 #12 (67s): Silence in between so the segmenter can close a sentence.
-2026-11-04 14:40:59,901 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:40:59,901 INFO repro 字幕｜原文='Please toQ all里有3。😊' 译文='请全部回答，里面有3。😊'
-2026-11-04 14:41:00,057 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:00,058 INFO repro 字幕｜原文='这个看吧。' 译文=''
-2026-11-04 14:41:01,501 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:01,502 INFO repro 字幕｜原文='这个看吧。' 译文='看这个吧。'
-2026-11-04 14:41:02,585 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:02,585 INFO repro 字幕｜原文='Thailand and between.' 译文=''
-2026-11-04 14:41:03,434 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:03,434 INFO repro 字幕｜原文='Silence in between, so the that manager can cause the.' 译文=''
-2026-11-04 14:41:04,686 INFO repro 放音 #13 (73s): The quick brown fox jumps over the lazy dog.
-2026-11-04 14:41:05,331 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:05,332 INFO repro 字幕｜原文='Silence in between, so the that manager can cause the.' 译文='中间的沉默，好让那位经理能引起那个。'
-2026-11-04 14:41:05,511 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:05,511 INFO repro 字幕｜原文='う。' 译文=''
-2026-11-04 14:41:07,039 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:07,040 INFO repro 字幕｜原文='う。' 译文='嗯。'
-2026-11-04 14:41:09,525 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:09,526 INFO repro 字幕｜原文='quick发.' 译文=''
-2026-11-04 14:41:09,848 INFO repro 放音 #14 (78s): Live caption turns whatever the computer plays into subtitles.
-2026-11-04 14:41:11,809 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:11,810 INFO repro 字幕｜原文='A quick brown fox jumped over the lazy dog.😊' 译文=''
-2026-11-04 14:41:13,517 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:13,518 INFO repro 字幕｜原文='A quick brown fox jumped over the lazy dog.😊' 译文='一只敏捷的棕色狐狸跃过了那只懒狗。😊'
-2026-11-04 14:41:15,122 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:15,122 INFO repro 字幕｜原文='My couch turns, whatever the computer plays into.' 译文=''
-2026-11-04 14:41:15,887 INFO repro 放音 #15 (84s): Screen capture kit delivers real audio sample buffers to the callback.
-2026-11-04 14:41:16,957 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:16,957 INFO repro 字幕｜原文='My couch turns, whatever the computer plays into.' 译文='我的沙发一转，电脑放什么就跟着变什么。'
-2026-11-04 14:41:17,131 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:17,131 INFO repro 字幕｜原文='好的。' 译文=''
-2026-11-04 14:41:18,964 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:18,965 INFO repro 字幕｜原文='好的。' 译文='收到，请发送需要翻译的字幕内容。'
-2026-11-04 14:41:19,799 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:19,800 INFO repro 字幕｜原文='screen卡 to贴9。' 译文=''
-2026-11-04 14:41:20,718 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:20,719 INFO repro 字幕｜原文='screeneen touch to for you all有3。😊' 译文=''
-2026-11-04 14:41:22,487 INFO repro 放音 #16 (90s): Silence in between so the segmenter can close a sentence.
-2026-11-04 14:41:22,495 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:22,496 INFO repro 字幕｜原文='screeneen touch to for you all有3。😊' 译文='屏幕触碰为你所有人有3。'
-2026-11-04 14:41:23,569 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:23,569 INFO repro 字幕｜原文='这个看下。' 译文=''
-2026-11-04 14:41:25,226 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:25,226 INFO repro 字幕｜原文='这个看下。' 译文='看一下这个。'
-2026-11-04 14:41:28,296 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:28,297 INFO repro 字幕｜原文='Tilence in between.' 译文=''
-2026-11-04 14:41:28,487 INFO repro 放音 #17 (96s): The quick brown fox jumps over the lazy dog.
-2026-11-04 14:41:28,892 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:28,892 INFO repro 字幕｜原文='Silence in between, so the said manager can pose the.' 译文=''
-2026-11-04 14:41:30,662 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:30,663 INFO repro 字幕｜原文='Silence in between, so the said manager can pose the.' 译文='中间的沉默，好让那位经理摆姿势。'
-2026-11-04 14:41:30,832 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:30,834 INFO repro 字幕｜原文='う。' 译文=''
-2026-11-04 14:41:32,325 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:32,327 INFO repro 字幕｜原文='う。' 译文='嗯。'
-2026-11-04 14:41:33,686 INFO repro 放音 #18 (102s): Live caption turns whatever the computer plays into subtitles.
-2026-11-04 14:41:34,470 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:34,470 INFO repro 字幕｜原文='The quick brown Fox jump over the lazy dog.' 译文=''
-2026-11-04 14:41:36,328 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:36,328 INFO repro 字幕｜原文='The quick brown Fox jump over the lazy dog.' 译文='敏捷的棕色狐狸跳过了那只懒狗。'
-2026-11-04 14:41:37,336 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:37,337 INFO repro 字幕｜原文='My canち.' 译文=''
-2026-11-04 14:41:37,994 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:37,995 INFO repro 字幕｜原文='My can.' 译文=''
-2026-11-04 14:41:38,395 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:38,395 INFO repro 字幕｜原文='My cap turns whatever the computer plays into.' 译文=''
-2026-11-04 14:41:39,848 INFO repro 放音 #19 (108s): Screen capture kit delivers real audio sample buffers to the callback.
-2026-11-04 14:41:40,455 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:40,456 INFO repro 字幕｜原文='My cap turns whatever the computer plays into.' 译文='我的帽子能把电脑播放的任何东西变成……'
-2026-11-04 14:41:40,606 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:40,606 INFO repro 字幕｜原文='查一下。' 译文=''
-2026-11-04 14:41:42,556 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:42,557 INFO repro 字幕｜原文='查一下。' 译文='查一下。'
-2026-11-04 14:41:44,679 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:44,680 INFO repro 字幕｜原文='天秋天9月。' 译文=''
-2026-11-04 14:41:44,900 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:44,901 INFO repro 字幕｜原文='有3。😊' 译文=''
-2026-11-04 14:41:46,440 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:46,441 INFO repro 字幕｜原文='有3。😊' 译文='有三个。😊'
-2026-11-04 14:41:46,486 INFO repro 放音 #20 (114s): Silence in between so the segmenter can close a sentence.
-2026-11-04 14:41:46,736 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:46,736 INFO repro 字幕｜原文='现在看吧。' 译文=''
-2026-11-04 14:41:48,076 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:48,076 INFO repro 字幕｜原文='现在看吧。' 译文='Now take a look.'
-2026-11-04 14:41:49,170 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:49,174 INFO repro 字幕｜原文='Tilent in between.' 译文=''
-2026-11-04 14:41:50,369 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:50,370 INFO repro 字幕｜原文='Sence in between.' 译文=''
-2026-11-04 14:41:50,989 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:50,989 INFO repro 字幕｜原文='Silence in between, so the magic can cause the.' 译文=''
-2026-11-04 14:41:52,252 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:52,253 INFO repro 字幕｜原文='Silence in between, so the magic can cause the.' 译文='中间留白，魔法才能生效。'
-2026-11-04 14:41:52,432 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:52,433 INFO repro 字幕｜原文='Yes。' 译文=''
-2026-11-04 14:41:52,486 INFO repro 放音 #21 (120s): The quick brown fox jumps over the lazy dog.
-2026-11-04 14:41:54,244 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:41:54,244 INFO repro 字幕｜原文='Yes。' 译文='是的。'
-2026-11-04 14:41:55,223 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:55,224 INFO repro 字幕｜原文='可不.' 译文=''
-2026-11-04 14:41:56,291 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:41:56,292 INFO repro 字幕｜原文='The quick brown.' 译文=''
-2026-11-04 14:41:57,647 INFO repro 放音 #22 (126s): Live caption turns whatever the computer plays into subtitles.
-2026-11-04 14:42:03,685 INFO repro 放音 #23 (132s): Screen capture kit delivers real audio sample buffers to the callback.
-2026-11-04 14:42:10,286 INFO repro 放音 #24 (138s): Silence in between so the segmenter can close a sentence.
-2026-11-04 14:42:16,286 INFO repro 放音 #25 (144s): The quick brown fox jumps over the lazy dog.
-2026-11-04 14:42:21,485 INFO repro 放音 #26 (149s): Live caption turns whatever the computer plays into subtitles.
-2026-11-04 14:42:26,510 ERROR app.pipeline.recognizer 云端识别异常
+2026-11-04 15:32:12,537 INFO repro 点击「开始捕获」
+2026-11-04 15:32:13,050 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 15:32:13,051 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 15:32:13,056 INFO repro 点击返回，按钮文字='停止'
+2026-11-04 15:32:13,855 INFO repro 放音 #1 (1s): The quick brown fox jumps over the lazy dog.
+2026-11-04 15:32:19,045 INFO repro 放音 #2 (6s): Live caption turns whatever the computer plays into subtitles.
+2026-11-04 15:32:21,169 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:21,170 INFO repro 字幕｜原文='The quick park.' 译文=''
+2026-11-04 15:32:21,438 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:21,439 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dogg.' 译文=''
+2026-11-04 15:32:23,470 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:23,471 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dogg.' 译文='敏捷的棕色狐狸跳过了懒狗。'
+2026-11-04 15:32:23,692 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:23,692 INFO repro 字幕｜原文='My cap turns whatever the computer plays.' 译文=''
+2026-11-04 15:32:25,206 INFO repro 放音 #3 (12s): Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 15:32:25,534 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:25,534 INFO repro 字幕｜原文='My cap turns whatever the computer plays.' 译文='我的帽子能转换电脑播放的任何内容。'
+2026-11-04 15:32:25,672 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:25,672 INFO repro 字幕｜原文='看一下。' 译文=''
+2026-11-04 15:32:27,106 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:27,106 INFO repro 字幕｜原文='看一下。' 译文='Take a look.'
+2026-11-04 15:32:27,857 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:27,857 INFO repro 字幕｜原文='不天切天。' 译文=''
+2026-11-04 15:32:29,023 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:29,025 INFO repro 字幕｜原文='可你天77点。😊' 译文=''
+2026-11-04 15:32:29,669 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:29,670 INFO repro 字幕｜原文='screen to贴9位 all里有3。😊' 译文=''
+2026-11-04 15:32:31,845 INFO repro 放音 #4 (19s): Silence in between so the segmenter can close a sentence.
+2026-11-04 15:32:32,357 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:32,357 INFO repro 字幕｜原文='screen to贴9位 all里有3。😊' 译文='屏幕到贴9位，全部里面有3个。😊'
+2026-11-04 15:32:32,572 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:32,572 INFO repro 字幕｜原文='这个课吧。' 译文=''
+2026-11-04 15:32:34,640 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:34,640 INFO repro 字幕｜原文='这个课吧。' 译文='这节课呢。'
+2026-11-04 15:32:35,707 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:35,708 INFO repro 字幕｜原文='T湾 and between.' 译文=''
+2026-11-04 15:32:36,382 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:36,382 INFO repro 字幕｜原文='Silence in between, so the sun manager can close the sun.' 译文=''
+2026-11-04 15:32:37,845 INFO repro 放音 #5 (25s): The quick brown fox jumps over the lazy dog.
+2026-11-04 15:32:38,465 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:38,465 INFO repro 字幕｜原文='Silence in between, so the sun manager can close the sun.' 译文='中间的静默，好让太阳管理者关闭太阳。'
+2026-11-04 15:32:43,024 INFO repro 放音 #6 (30s): Live caption turns whatever the computer plays into subtitles.
+2026-11-04 15:32:45,648 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:45,649 INFO repro 字幕｜原文='う。' 译文=''
+2026-11-04 15:32:47,508 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:47,509 INFO repro 字幕｜原文='う。' 译文='嗯。'
+2026-11-04 15:32:49,044 INFO repro 放音 #7 (36s): Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 15:32:50,202 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:50,202 INFO repro 字幕｜原文='A quick brown fox jumped over the lazy dogg.' 译文=''
+2026-11-04 15:32:52,179 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:52,179 INFO repro 字幕｜原文='A quick brown fox jumped over the lazy dogg.' 译文='一只敏捷的棕色狐狸跃过了那只懒狗。'
+2026-11-04 15:32:52,358 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:52,358 INFO repro 字幕｜原文='My caption turns the computer page.' 译文=''
+2026-11-04 15:32:54,099 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:54,099 INFO repro 字幕｜原文='My caption turns the computer page.' 译文='我的字幕翻动了电脑页面。'
+2026-11-04 15:32:54,313 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:54,313 INFO repro 字幕｜原文='看下。' 译文=''
+2026-11-04 15:32:55,644 INFO repro 放音 #8 (43s): Silence in between so the segmenter can close a sentence.
+2026-11-04 15:32:55,935 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:55,935 INFO repro 字幕｜原文='看下。' 译文='看看这个。'
+2026-11-04 15:32:56,245 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:32:56,245 INFO repro 字幕｜原文='Please to take for you all里有3。😊' 译文=''
+2026-11-04 15:32:58,748 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:32:58,749 INFO repro 字幕｜原文='Please to take for you all里有3。😊' 译文='请把所有的都拿走，里面有3个。😊'
+2026-11-04 15:33:00,850 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:00,851 INFO repro 字幕｜原文='是个看吧。' 译文=''
+2026-11-04 15:33:01,645 INFO repro 放音 #9 (49s): The quick brown fox jumps over the lazy dog.
+2026-11-04 15:33:02,797 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:02,797 INFO repro 字幕｜原文='是个看吧。' 译文='看吧。'
+2026-11-04 15:33:03,684 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:03,685 INFO repro 字幕｜原文='Silence in between, so the se can cause the.' 译文=''
+2026-11-04 15:33:05,370 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:05,371 INFO repro 字幕｜原文='Silence in between, so the se can cause the.' 译文='中间的沉默，所以这会导致。'
+2026-11-04 15:33:05,722 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:05,936 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:05,937 INFO repro 字幕｜原文='The quick brown box jump over the lazy dog.' 译文=''
+2026-11-04 15:33:06,807 INFO repro 放音 #10 (54s): Live caption turns whatever the computer plays into subtitles.
+2026-11-04 15:33:08,079 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:08,079 INFO repro 字幕｜原文='The quick brown box jump over the lazy dog.' 译文='敏捷的棕色盒子跃过了懒狗。'
+2026-11-04 15:33:09,430 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:09,430 INFO repro 字幕｜原文='My can新。' 译文=''
+2026-11-04 15:33:10,637 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:10,638 INFO repro 字幕｜原文='My can.' 译文=''
+2026-11-04 15:33:11,253 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:11,253 INFO repro 字幕｜原文='My cap turns whatever the computer plays into.' 译文=''
+2026-11-04 15:33:12,844 INFO repro 放音 #11 (60s): Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 15:33:13,399 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:13,399 INFO repro 字幕｜原文='My cap turns whatever the computer plays into.' 译文='我的帽子能把电脑播放的任何东西变成。'
+2026-11-04 15:33:15,160 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:15,160 INFO repro 字幕｜原文='哎呀。' 译文=''
+2026-11-04 15:33:17,350 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:17,351 INFO repro 字幕｜原文='哎呀。' 译文='哎哟。'
+2026-11-04 15:33:17,547 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:17,548 INFO repro 字幕｜原文='不ring touch to贴 for you all里有散。😊' 译文=''
+2026-11-04 15:33:19,142 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:19,143 INFO repro 字幕｜原文='不ring touch to贴 for you all里有散。😊' 译文='不碰你们所有人，这里有散。😊'
+2026-11-04 15:33:19,329 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:19,330 INFO repro 字幕｜原文='去去看看。' 译文=''
+2026-11-04 15:33:19,445 INFO repro 放音 #12 (66s): Silence in between so the segmenter can close a sentence.
+2026-11-04 15:33:20,804 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:20,805 INFO repro 字幕｜原文='去去看看。' 译文='去看看。'
+2026-11-04 15:33:22,213 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:22,214 INFO repro 字幕｜原文='T in between.' 译文=''
+2026-11-04 15:33:25,230 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:25,231 INFO repro 字幕｜原文='Tance in between.' 译文=''
+2026-11-04 15:33:25,444 INFO repro 放音 #13 (72s): The quick brown fox jumps over the lazy dog.
+2026-11-04 15:33:25,543 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:25,544 INFO repro 字幕｜原文='Sence in between, so the said manager can pose the.' 译文=''
+2026-11-04 15:33:27,589 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:27,590 INFO repro 字幕｜原文='Sence in between, so the said manager can pose the.' 译文='所以中间的场景，经理可以摆出那个姿势。'
+2026-11-04 15:33:28,208 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:28,208 INFO repro 字幕｜原文='Yes。' 译文=''
+2026-11-04 15:33:30,512 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:30,512 INFO repro 字幕｜原文='Yes。' 译文='是的。'
+2026-11-04 15:33:30,606 INFO repro 放音 #14 (78s): Live caption turns whatever the computer plays into subtitles.
+2026-11-04 15:33:35,342 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:35,343 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dog.' 译文=''
+2026-11-04 15:33:36,644 INFO repro 放音 #15 (84s): Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 15:33:36,728 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:36,728 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dog.' 译文='敏捷的棕色狐狸跃过那只懒狗。'
+2026-11-04 15:33:39,802 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:39,803 INFO repro 字幕｜原文='My cap turns, whatever the computer plays into.' 译文=''
+2026-11-04 15:33:42,109 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:42,109 INFO repro 字幕｜原文='My cap turns, whatever the computer plays into.' 译文='我的帽子一转，不管电脑放什么都能变。'
+2026-11-04 15:33:43,244 INFO repro 放音 #16 (90s): Silence in between so the segmenter can close a sentence.
+2026-11-04 15:33:44,653 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:44,654 INFO repro 字幕｜原文='好的。' 译文=''
+2026-11-04 15:33:46,247 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:46,247 INFO repro 字幕｜原文='好的。' 译文='好的，请发送需要翻译的字幕内容。'
+2026-11-04 15:33:48,460 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:48,460 INFO repro 字幕｜原文='We吃Q for you all里有散。😊' 译文=''
+2026-11-04 15:33:49,245 INFO repro 放音 #17 (96s): The quick brown fox jumps over the lazy dog.
+2026-11-04 15:33:50,092 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:50,092 INFO repro 字幕｜原文='We吃Q for you all里有散。😊' 译文='我们为你准备了Q，里面有一些。😊'
+2026-11-04 15:33:50,418 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:50,418 INFO repro 字幕｜原文='是不看吧。' 译文=''
+2026-11-04 15:33:52,358 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:52,359 INFO repro 字幕｜原文='是不看吧。' 译文='是不看吧。'
+2026-11-04 15:33:54,404 INFO repro 放音 #18 (101s): Live caption turns whatever the computer plays into subtitles.
+2026-11-04 15:33:56,701 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:56,702 INFO repro 字幕｜原文='Silence in between, so the sand magic can pose the sun.' 译文=''
+2026-11-04 15:33:58,624 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:33:58,625 INFO repro 字幕｜原文='Silence in between, so the sand magic can pose the sun.' 译文='中间的沉默，让沙子的魔力得以塑造太阳。'
+2026-11-04 15:33:58,822 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:59,016 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:33:59,017 INFO repro 字幕｜原文='The quick brown box jump over the lazy dog.' 译文=''
+2026-11-04 15:34:00,443 INFO repro 放音 #19 (107s): Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 15:34:00,752 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:34:00,752 INFO repro 字幕｜原文='The quick brown box jump over the lazy dog.' 译文='敏捷的棕色盒子跳过了懒狗。'
+2026-11-04 15:34:00,968 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:34:00,969 INFO repro 字幕｜原文='My caption turns whatever the computer plays into.' 译文=''
+2026-11-04 15:34:02,982 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:34:02,982 INFO repro 字幕｜原文='My caption turns whatever the computer plays into.' 译文='我的字幕能把电脑播放的任何内容转成文字。'
+2026-11-04 15:34:07,043 INFO repro 放音 #20 (114s): Silence in between so the segmenter can close a sentence.
+2026-11-04 15:34:13,044 INFO repro 放音 #21 (120s): The quick brown fox jumps over the lazy dog.
+2026-11-04 15:34:16,995 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:34:16,996 INFO repro 字幕｜原文='好的。' 译文=''
+2026-11-04 15:34:18,244 INFO repro 放音 #22 (125s): Live caption turns whatever the computer plays into subtitles.
+2026-11-04 15:34:18,733 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:34:18,733 INFO repro 字幕｜原文='好的。' 译文='好的，请发送需要翻译的字幕内容。'
+2026-11-04 15:34:20,429 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:34:20,430 INFO repro 字幕｜原文='for you有3。' 译文=''
+2026-11-04 15:34:22,728 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:34:22,728 INFO repro 字幕｜原文='for you有3。' 译文='给你的有三个。'
+2026-11-04 15:34:23,015 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:34:23,016 INFO repro 字幕｜原文='谢谢看吧。' 译文=''
+2026-11-04 15:34:24,405 INFO repro 放音 #23 (131s): Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 15:34:24,946 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:34:24,946 INFO repro 字幕｜原文='谢谢看吧。' 译文='谢谢观看。'
+2026-11-04 15:34:25,365 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:34:25,365 INFO repro 字幕｜原文='Silence in between, so the that magic can the.' 译文=''
+2026-11-04 15:34:27,780 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:34:27,781 INFO repro 字幕｜原文='Silence in between, so the that magic can the.' 译文='中间的沉默，让魔法得以显现。'
+2026-11-04 15:34:31,044 INFO repro 放音 #24 (138s): Silence in between so the segmenter can close a sentence.
+2026-11-04 15:34:37,043 INFO repro 放音 #25 (144s): The quick brown fox jumps over the lazy dog.
+2026-11-04 15:34:42,205 INFO repro 放音 #26 (149s): Live caption turns whatever the computer plays into subtitles.
+2026-11-04 15:34:48,242 INFO repro 放音 #27 (155s): Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 15:34:54,843 INFO repro 放音 #28 (162s): Silence in between so the segmenter can close a sentence.
+2026-11-04 15:34:57,789 ERROR app.pipeline.recognizer 云端识别异常
 Traceback (most recent call last):
   File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/.venv/lib/python3.12/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
@@ -280,37 +243,14 @@ Traceback (most recent call last):
   File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/.venv/lib/python3.12/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
     raise mapped_exc(message) from exc
 httpx.ReadTimeout: The read operation timed out
-2026-11-04 14:42:26,514 WARNING app.pipeline.asr_pipeline 识别失败: 识别出错：The read operation timed out（检查网络或地址）
-2026-11-04 14:42:27,647 INFO repro 放音 #27 (156s): Screen capture kit delivers real audio sample buffers to the callback.
-2026-11-04 14:42:27,701 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:42:27,701 INFO repro 字幕｜原文='My cap turns whatever the computer plays.' 译文=''
-2026-11-04 14:42:29,926 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:42:29,926 INFO repro 字幕｜原文='My cap turns whatever the computer plays.' 译文='我的帽子能把电脑播放的任何声音转成字幕。'
-2026-11-04 14:42:30,096 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:42:30,097 INFO repro 字幕｜原文='看一下。' 译文=''
-2026-11-04 14:42:31,768 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:42:31,769 INFO repro 字幕｜原文='看一下。' 译文='Take a look.'
-2026-11-04 14:42:31,995 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:42:31,996 INFO repro 字幕｜原文='We to take for you all有 sample。' 译文=''
-2026-11-04 14:42:33,636 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:42:33,636 INFO repro 字幕｜原文='We to take for you all有 sample。' 译文='我们要为你们所有人提供样品。'
-2026-11-04 14:42:34,285 INFO repro 放音 #28 (162s): Silence in between so the segmenter can close a sentence.
-2026-11-04 14:42:40,285 INFO repro 放音 #29 (168s): The quick brown fox jumps over the lazy dog.
-2026-11-04 14:42:44,772 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:42:44,774 INFO repro 字幕｜原文='谢谢看看。' 译文=''
-2026-11-04 14:42:45,446 INFO repro 放音 #30 (173s): Live caption turns whatever the computer plays into subtitles.
-2026-11-04 14:42:46,291 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:42:46,291 INFO repro 字幕｜原文='谢谢看看。' 译文='谢谢观看。'
-2026-11-04 14:42:47,836 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:42:47,837 INFO repro 字幕｜原文='Silence in between, so the can the.' 译文=''
-2026-11-04 14:42:49,322 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:42:49,325 INFO repro 字幕｜原文='Silence in between, so the can the.' 译文='中间的沉默，所以能够。'
-2026-11-04 14:42:49,867 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
-2026-11-04 14:42:49,868 INFO repro 字幕｜原文='う。' 译文=''
-2026-11-04 14:42:51,168 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
-2026-11-04 14:42:51,169 INFO repro 字幕｜原文='う。' 译文='嗯。'
-2026-11-04 14:42:51,484 INFO repro 放音 #31 (179s): Screen capture kit delivers real audio sample buffers to the callback.
-2026-11-04 14:42:58,086 INFO repro soak 结束 186s：收到音频块 9299 个，运行中=True，解析跳帧=无
-2026-11-04 14:43:00,088 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
-2026-11-04 14:43:00,139 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
-SOAK_EXIT=0
+2026-11-04 15:34:57,794 WARNING app.pipeline.asr_pipeline 识别失败: 识别出错：The read operation timed out（检查网络或地址）
+2026-11-04 15:35:00,843 INFO repro 放音 #29 (168s): The quick brown fox jumps over the lazy dog.
+2026-11-04 15:35:06,004 INFO repro 放音 #30 (173s): Live caption turns whatever the computer plays into subtitles.
+2026-11-04 15:35:12,205 INFO repro 放音 #31 (179s): Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 15:35:13,543 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 15:35:13,544 INFO repro 字幕｜原文='W brown f jumps over the lazy dog.' 译文=''
+2026-11-04 15:35:15,160 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 15:35:15,160 INFO repro 字幕｜原文='W brown f jumps over the lazy dog.' 译文='棕色的狐狸跳过了懒狗。'
+2026-11-04 15:35:18,843 INFO repro soak 结束 186s：收到音频块 9288 个，运行中=True，解析跳帧=无
+2026-11-04 15:35:20,845 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
+2026-11-04 15:35:20,892 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）

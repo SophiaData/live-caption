@@ -82,8 +82,9 @@ A 手工同款 5 次崩 1 次（其余 4 次运气好没撞上）；老板真机
 |---|---|---|
 | B 压力脚本 14 轮 ×2 | 首轮即 SIGSEGV（exit 139） | 28/28 轮全过，exit 0（`logs/stress-after-fix-1/2.log`） |
 | B 压力脚本（入库版重跑） | 同上 | 14/14 轮、3636 帧全部解析成功、0 跳帧、exit 0（`logs/stress-after-fix-toolcheck.log`） |
+| B 压力脚本（**最后一笔改动后在最终 head 复跑**） | 同上 | 14/14 轮、3666 帧全解析、0 跳帧、exit 0（`logs/final-stress-14.log`） |
 
-修复后合计 **46 次真流会话、约 2.1 万帧音频块、0 崩溃**。
+修复后合计 **61 次真流会话、约 3.4 万帧音频块、0 崩溃**（本目录日志里能数出来：14 轮 ×4 次 + 手工同款 3 次 + soak 2 次 = 61 次会话）。
 | A 手工同款 ×3 | 1/5 崩 | 3/3 不崩，各收到 944 块（`logs/app-attempt-{1,2,3}-after-fix.log`） |
 | 差分实验（同脚本，一次只改一个变量） | 回调里首次加载 → 3/3 崩 | 主线程只 `import CoreMedia`：0/6 轮；主线程 import+解析函数：0/36 轮；不改加载、只给回调加 autorelease pool：0/28 轮 |
 
@@ -92,23 +93,23 @@ A 手工同款 5 次崩 1 次（其余 4 次运气好没撞上）；老板真机
 
 ## 要求 4 + 验收 3：3 分钟真放音 soak（真识别 + 真翻译）
 
-`logs/soak-180s.log`：
+两份 soak 日志：修复后立刻跑过一次（186 秒 / 9299 块 / 104 条字幕），最后一笔代码改动之后**在最终 head 上又复跑一遍**——仓库里保存的是后者：
+
 
 ```
 2026-11-04 14:39:51,535 INFO repro 点击「开始捕获」
 2026-11-04 14:39:52,076 INFO app.capture.sck_session SCK 流已启动
-2026-11-04 14:42:58,086 INFO repro soak 结束 186s：收到音频块 9299 个，运行中=True，解析跳帧=无
-2026-11-04 14:43:00,139 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
+2026-11-04 15:35:18,843 INFO repro soak 结束 186s：收到音频块 9288 个，运行中=True，解析跳帧=无
+2026-11-04 15:35:20,892 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
 ```
 
-**186 秒、31 句 `say` 语音（句间 1.2 秒静音）、9299 个音频块、104 条字幕、0 崩溃、0 跳帧。**
+**186 秒、31 句 `say` 语音（句间 1.2 秒静音）、9288 个音频块、74 条字幕、0 崩溃、0 跳帧。**
+（字幕条数随断句与真服务的响应时机浮动，两轮分别是 104 与 74；关键是「非 0」且没有崩溃/跳帧。）
 字幕抽样（原文 / 译文都真的出来了）：
 
 ```
-14:39:57  原文='The quick brown fox jumps over the lazy dog.'
-14:39:59  译文='敏捷的棕色狐狸跳过了懒狗。'
-14:40:02  原文='My cap turns, whatever the computer plays into.'  译文='我的帽子一转，就跟着电脑播放的内容变。'
-14:40:04  原文='看下。'  译文='Take a look.'
+15:32:22  原文='The quick brown fox jumps over the lazy dog.'  译文='敏捷的棕狐跳过懒狗。'
+15:35:15  原文='W brown f jumps over the lazy dog.'  译文='棕色的狐狸跳过了懒狗。'
 ```
 
 ## 要求 2：空值与返回码防护（不再静默丢帧）
@@ -148,7 +149,7 @@ WARNING，同类每 100 帧再报一次）并计入 `drop_report()`：
 顺带把真机实测形状钉成用例并同步了假件：PyObjC 13 把 ASBD 摊平成 **9 元素元组**
 `[16000.0, 1819304813('lpcm'), 41, 4, 1, 4, 2, 32, 0]`、块缓冲 2560 字节/帧、
 `CMSampleBufferGetNumSamples=320`（原始输出 `logs/frame-format-measured.txt`，
-`tools/probe_frame_format.py` 可重跑。同一次探测里 259 帧真 buffer **全部解析成功、0 跳帧**——这条很重要：新加的格式判据不能把真帧挡掉，只挡真不该吃的东西）。
+`tools/probe_frame_format.py` 可重跑。最近一次探测里 249 帧真 buffer **全部解析成功、0 跳帧**——这条很重要：新加的格式判据不能把真帧挡掉，只挡真不该吃的东西）。
 旧的 `_FakeCoreMedia` 给的是 7 元素假元组（formatID=0、位深=0），与真机不符——已改成真机形状，
 **既有断言一条都没改**（48000Hz→1600 样本、满量程音量等仍原样）。
 
@@ -179,7 +180,7 @@ WARNING，同类每 100 帧再报一次）并计入 `drop_report()`：
 ```bash
 # 0) 让屏幕别熄（熄了 SCK 报 0 显示器，白跑）
 caffeinate -di -u -t 900 bash -c '
-  # 1) 量真机帧形状（259 帧全解析、0 跳帧）
+  # 1) 量真机帧形状（249 帧全解析、0 跳帧）
   .venv/bin/python docs/qa/issue-22/tools/probe_frame_format.py
   # 2) 首帧路径打死（14 轮起停真流）
   .venv/bin/python docs/qa/issue-22/tools/stress_sessions.py --rounds 14
