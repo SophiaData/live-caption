@@ -203,68 +203,55 @@ def extract_audio_samples(sample_buffer: object) -> tuple[np.ndarray, int] | Non
 
     if sample_buffer is None:
         _reject("SCK 回调给了空 sample buffer")
-
         return None
 
     try:
         fmt = cm["CMSampleBufferGetFormatDescription"](sample_buffer)
     except Exception as e:  # noqa: BLE001 - Python 层异常（不是段错误），照样跳帧留痕
         _reject(f"取格式描述时出错：{type(e).__name__}: {e}")
-
         return None
     if fmt is None:
         _reject("这帧没有格式描述（CMSampleBufferGetFormatDescription 返回空）")
-
         return None
 
     asbd = cm["CMAudioFormatDescriptionGetStreamBasicDescription"](fmt)
     if asbd is None:
         _reject("格式描述里没有 ASBD（取采样率/声道数的依据）")
-
         return None
     fields = _asbd_fields(asbd)
     if fields is None:
         _reject("ASBD 形状不认识，读不出采样率/声道数")
-
         return None
     rate, channels, format_id, flags, bits = fields
     if rate <= 0 or channels <= 0:
         _reject(f"ASBD 里的采样率/声道数不可用（rate={rate}, channels={channels}）")
-
         return None
     # 字段为 0 当「不知道」处理（沿用历史行为）；一旦明确报出不是 32 位浮点交错 PCM，
     # 就必须跳帧——按 float32 硬解析 int16/分离声道数据会得到垃圾音频，那比丢一帧更糟。
     if format_id not in (0, _LPCM_FORMAT_ID):
         _reject(f"音频不是线性 PCM（formatID={format_id}）")
-
         return None
     if bits not in (0, 32):
         _reject(f"音频位深不是 32 位浮点（bits={bits}）")
-
         return None
     if flags and not flags & _FLAG_IS_FLOAT:
         _reject(f"音频不是浮点格式（flags={flags}）")
-
         return None
     if flags & _FLAG_NON_INTERLEAVED:
         _reject("音频是分声道存放的缓冲（非交错），本版本只吃交错帧")
-
         return None
 
     data_buf = cm["CMSampleBufferGetDataBuffer"](sample_buffer)
     if data_buf is None:
         _reject("这帧没有数据块缓冲（CMSampleBufferGetDataBuffer 返回空）")
-
         return None
 
     length = int(cm["CMBlockBufferGetDataLength"](data_buf))
     if length <= 0:
         _reject(f"这帧的音频数据长度为 {length}")
-
         return None
     if length % (_BYTES_PER_SAMPLE * channels) != 0:
         _reject(f"数据长度 {length} 不是 声道数×4 字节的整数倍，按非预期格式跳过")
-
         return None
 
     buf = (ctypes.c_char * length)()
@@ -273,12 +260,10 @@ def extract_audio_samples(sample_buffer: object) -> tuple[np.ndarray, int] | Non
     status = int(result[0] if isinstance(result, tuple) else result)
     if status != 0:
         _reject(f"拷贝 PCM 失败（OSStatus={status}）")
-
         return None
 
     samples = _interleaved_to_mono(bytes(buf), channels)
     if len(samples) == 0:
         _reject("拷贝后没有样本")
-
         return None
     return samples, rate
