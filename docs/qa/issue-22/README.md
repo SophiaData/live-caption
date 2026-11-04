@@ -113,7 +113,7 @@ A 手工同款 5 次崩 1 次（其余 4 次运气好没撞上）；老板真机
 
 ## 要求 2：空值与返回码防护（不再静默丢帧）
 
-`app/capture/sck.py::extract_audio_samples` 逐步判，每条原因都写成人话进日志（首次就
+`app/capture/sck.py::extract_audio_samples` 逐步判（老实说：`fmt`/`asbd`/`data_buf`/`length`/`OSStatus` 老代码**都判了**，缺的是判完一律 `return None` 不出声、不计数，外加两处 `or 16000`/`or 1` 的猜测与「格式完全不判」），每条原因都写成人话进日志（首次就
 WARNING，同类每 100 帧再报一次）并计入 `drop_report()`：
 
 | 拿到的东西 | 判据 → 不判会怎样 |
@@ -124,8 +124,9 @@ WARNING，同类每 100 帧再报一次）并计入 `drop_report()`：
 | formatID 不是 `'lpcm'`、位深不是 32、没有浮点标志、非交错 | int16 当 float32 解 → 满屏噪音送识别 |
 | 数据块缓冲为 `None` | 空指针 |
 | 数据长度 ≤ 0 或不是 `声道×4` 的整数倍 | 分配 0 字节缓冲 / reshape 抛异常 |
-| `CMBlockBufferCopyDataBytes` 返回码非 0 | **把没填过的 ctypes 缓冲当音频用**（原代码最阴的一条：它其实判了，但返回来的是空缓冲还被当成声音） |
-| 采样率/声道数 ≤ 0 | 重采样除以 0 |
+| `CMBlockBufferCopyDataBytes` 返回码非 0 | **把没填过的 ctypes 缓冲当音频用** |
+| 采样率/声道数 ≤ 0（老代码用 `or 16000`、`or 1` **猜**成合法值） | 猜出来的采样率喂进重采样，声音时长就错了 |
+| `CMBlockBufferCopyDataBytes` 的 OSStatus != 0 | 把没填过的缓冲当音频用。**说明**：老代码这条也判了并返回 None，但判完不出声——既不写原因也不计数，日志里查不到丢过多少帧；本次的改动是「吭声 + 计数」，不是「从无到有」 |
 
 **没有用 `try/except` 去「包」段错误**——Python 抓不到 SIGSEGV，包了也没用；上面全部是
 在解引用之前就不往下走。留在最后的 `except` 只兜 Python 层异常，同样进 `drop_report()` 吭声。
