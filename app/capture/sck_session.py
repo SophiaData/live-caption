@@ -30,6 +30,7 @@ from .sck import (
     denied_hint,
     extract_audio_samples,
     load_coremedia,
+    resample_to_16k,
 )
 
 logger = logging.getLogger(__name__)
@@ -206,9 +207,11 @@ class SCKSession:
                 )
 
     def _on_audio_frame(self, samples: np.ndarray, rate: int) -> None:
-        """delegate 回调（SCK 音频队列线程）：重采样 + 音量，交给上层。"""
-        from .sck import resample_to_16k
+        """delegate 回调（SCK 音频队列线程）：重采样 + 音量，交给上层。
 
+        回调线程里一个 `import` 都不留（Issue #22：首次加载/初始化不能发生在这条线程上），
+        所以 `resample_to_16k` 走模块顶部的 from-import。
+        """
         mono16k = resample_to_16k(samples, rate)
         if len(mono16k) == 0:
             return
