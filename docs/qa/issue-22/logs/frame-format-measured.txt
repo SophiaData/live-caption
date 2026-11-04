@@ -1,0 +1,78 @@
+{"frames": 247, "parsed": 247, "dropped": 0}
+[
+ {
+  "buffer_type": "CMSampleBufferRef",
+  "asbd_is_tuple": true,
+  "asbd_raw": [
+   16000.0,
+   1819304813,
+   41,
+   4,
+   1,
+   4,
+   2,
+   32,
+   0
+  ],
+  "rate_channels_formatid_flags_bits": [
+   16000,
+   2,
+   1819304813,
+   41,
+   32,
+   4
+  ],
+  "block_bytes": 2560,
+  "num_samples": 320
+ },
+ {
+  "buffer_type": "CMSampleBufferRef",
+  "asbd_is_tuple": true,
+  "asbd_raw": [
+   16000.0,
+   1819304813,
+   41,
+   4,
+   1,
+   4,
+   2,
+   32,
+   0
+  ],
+  "rate_channels_formatid_flags_bits": [
+   16000,
+   2,
+   1819304813,
+   41,
+   32,
+   4
+  ],
+  "block_bytes": 2560,
+  "num_samples": 320
+ },
+ {
+  "buffer_type": "CMSampleBufferRef",
+  "asbd_is_tuple": true,
+  "asbd_raw": [
+   16000.0,
+   1819304813,
+   41,
+   4,
+   1,
+   4,
+   2,
+   32,
+   0
+  ],
+  "rate_channels_formatid_flags_bits": [
+   16000,
+   2,
+   1819304813,
+   41,
+   32,
+   4
+  ],
+  "block_bytes": 2560,
+  "num_samples": 320
+ }
+]

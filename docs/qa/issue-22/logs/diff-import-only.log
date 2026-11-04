@@ -1,0 +1,8 @@
+[stress] 只 import CoreMedia，不解析函数
+[stress] round 1/6 ok (start 0.31s) buffers=209 rss=112304MB
+[stress] round 2/6 ok (start 0.19s) buffers=408 rss=112448MB
+[stress] round 3/6 ok (start 0.19s) buffers=605 rss=112448MB
+[stress] round 4/6 ok (start 0.19s) buffers=804 rss=112448MB
+[stress] round 5/6 ok (start 0.20s) buffers=1003 rss=112448MB
+[stress] round 6/6 ok (start 0.20s) buffers=1200 rss=112448MB
+[stress] 全部 6 轮完成，未崩溃 stats={'buffers': 1200, 'ok': 1200, 'none': 0}

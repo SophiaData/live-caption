@@ -1,0 +1,25 @@
+2026-11-04 16:54:23,979 INFO repro 点击「开始捕获」
+2026-11-04 16:54:24,511 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 16:54:24,511 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 16:54:24,516 INFO repro 点击返回，按钮文字='停止'
+2026-11-04 16:54:25,379 INFO repro 放音 #1: The quick brown fox jumps over the lazy dog.
+2026-11-04 16:54:30,579 INFO repro 放音 #2: Live caption turns whatever the computer plays into subtitles.
+2026-11-04 16:54:36,714 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 16:54:36,715 INFO repro 字幕｜原文='The quick brown Fox.' 译文=''
+2026-11-04 16:54:36,741 INFO repro 放音 #3: Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 16:54:36,923 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 16:54:36,923 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dog.' 译文=''
+2026-11-04 16:54:38,954 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 16:54:38,954 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dog.' 译文='敏捷的棕色狐狸跳过了懒狗。'
+2026-11-04 16:54:39,206 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 16:54:39,207 INFO repro 字幕｜原文='Live caption turns whatever the computer plays into sub.' 译文=''
+2026-11-04 16:54:41,254 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 16:54:41,255 INFO repro 字幕｜原文='Live caption turns whatever the computer plays into sub.' 译文='实时字幕能把电脑播放的任何声音转成字幕。'
+2026-11-04 16:54:42,080 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 16:54:42,081 INFO repro 字幕｜原文='はいどう？' 译文=''
+2026-11-04 16:54:43,379 INFO repro 放音结束：收到音频块 944 个，运行中=True
+2026-11-04 16:54:43,394 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 16:54:43,395 INFO repro 字幕｜原文='はいどう？' 译文='怎么样？'
+2026-11-04 16:54:43,396 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
+2026-11-04 16:54:43,421 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
+app attempt exit=0

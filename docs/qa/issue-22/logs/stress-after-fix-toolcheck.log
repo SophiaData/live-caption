@@ -1,0 +1,16 @@
+[stress] round 1/14 ok buffers=269 parsed=269 dropped=0
+[stress] round 2/14 ok buffers=528 parsed=528 dropped=0
+[stress] round 3/14 ok buffers=787 parsed=787 dropped=0
+[stress] round 4/14 ok buffers=1046 parsed=1046 dropped=0
+[stress] round 5/14 ok buffers=1305 parsed=1305 dropped=0
+[stress] round 6/14 ok buffers=1564 parsed=1564 dropped=0
+[stress] round 7/14 ok buffers=1823 parsed=1823 dropped=0
+[stress] round 8/14 ok buffers=2082 parsed=2082 dropped=0
+[stress] round 9/14 ok buffers=2341 parsed=2341 dropped=0
+[stress] round 10/14 ok buffers=2600 parsed=2600 dropped=0
+[stress] round 11/14 ok buffers=2859 parsed=2859 dropped=0
+[stress] round 12/14 ok buffers=3118 parsed=3118 dropped=0
+[stress] round 13/14 ok buffers=3377 parsed=3377 dropped=0
+[stress] round 14/14 ok buffers=3636 parsed=3636 dropped=0
+[stress] 全部 14 轮完成，未崩溃 stats={'buffers': 3636, 'parsed': 3636, 'dropped': 0}
+TOOL_EXIT=0

@@ -1,0 +1,112 @@
+=== attempt 1 (subtitles ON) ===
+2026-11-04 13:22:51,505 INFO repro 点击「开始捕获」
+2026-11-04 13:22:52,038 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 13:22:52,038 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 13:22:52,043 INFO repro 点击返回，按钮文字='停止'
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x7b4a410380 of type ^{opaqueCMSampleBuffer=}
+2026-11-04 13:22:52,944 INFO repro 放音 #1: The quick brown fox jumps over the lazy dog.
+2026-11-04 13:22:58,112 INFO repro 放音 #2: Live caption turns whatever the computer plays into subtitles.
+2026-11-04 13:23:04,150 INFO repro 放音 #3: Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 13:23:10,750 INFO repro 放音结束：收到音频块 934 个，运行中=True
+2026-11-04 13:23:11,355 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:11,356 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
+2026-11-04 13:23:11,425 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
+=== attempt 1 exit=0 ===
+=== attempt 2 (subtitles ON) ===
+2026-11-04 13:23:13,617 INFO repro 点击「开始捕获」
+2026-11-04 13:23:14,122 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 13:23:14,122 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 13:23:14,126 INFO repro 点击返回，按钮文字='停止'
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x7772810380 of type ^{opaqueCMSampleBuffer=}
+2026-11-04 13:23:14,949 INFO repro 放音 #1: The quick brown fox jumps over the lazy dog.
+2026-11-04 13:23:20,111 INFO repro 放音 #2: Live caption turns whatever the computer plays into subtitles.
+2026-11-04 13:23:21,173 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:23,545 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:25,413 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:23:25,819 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:26,150 INFO repro 放音 #3: Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 13:23:28,430 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:23:28,627 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:30,490 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:23:30,762 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:32,183 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:23:32,750 INFO repro 放音结束：收到音频块 930 个，运行中=True
+2026-11-04 13:23:33,506 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:34,753 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
+2026-11-04 13:23:34,834 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
+=== attempt 2 exit=0 ===
+=== attempt 3 (subtitles ON) ===
+2026-11-04 13:23:37,032 INFO repro 点击「开始捕获」
+2026-11-04 13:23:37,534 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 13:23:37,534 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 13:23:37,538 INFO repro 点击返回，按钮文字='停止'
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x787d746d80 of type ^{opaqueCMSampleBuffer=}
+Fatal Python error: Segmentation fault
+
+Current thread 0x000000016d8d3000 (most recent call first):
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/app/capture/sck.py", line 93 in extract_audio_samples
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/app/capture/sck_session.py", line 73 in stream_didOutputSampleBuffer_ofType_
+
+Thread 0x000000016e96b000 (most recent call first):
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/app/pipeline/asr_pipeline.py", line 279 in _work_loop
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/threading.py", line 1012 in run
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/threading.py", line 1075 in _bootstrap_inner
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/threading.py", line 1032 in _bootstrap
+
+Thread 0x00000001f97a1300 (most recent call first):
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/docs/qa/issue-22/tools/run_capture.py", line 139 in main
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/docs/qa/issue-22/tools/run_capture.py", line 145 in <module>
+
+Extension modules: shiboken6.Shiboken, PySide6.QtCore, PySide6.QtGui, PySide6.QtWidgets, numpy._core._multiarray_umath, numpy.linalg._umath_linalg, _cffi_backend, objc._objc, CoreFoundation._CoreFoundation, CoreFoundation._inlines, Foundation._Foundation, Foundation._inlines, AppKit._AppKit, AppKit._inlines, Quartz.CoreGraphics._callbacks, Quartz.CoreGraphics._sortandmap, Quartz.CoreGraphics._CoreGraphics, Quartz.CoreGraphics._inlines, Quartz.ImageKit._ImageKit, Quartz.CoreVideo._CoreVideo, Quartz.QuartzCore._QuartzCore, Quartz.PDFKit._PDFKit, Quartz.QuickLookUI._QuickLookUI, ScreenCaptureKit._ScreenCaptureKit, CoreMedia._CoreMedia, CoreMedia._inlines (total: 26)
+=== attempt 3 exit=139 ===
+=== attempt 4 (subtitles ON) ===
+2026-11-04 13:23:39,650 INFO repro 点击「开始捕获」
+2026-11-04 13:23:40,114 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 13:23:40,114 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 13:23:40,118 INFO repro 点击返回，按钮文字='停止'
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x7acdb60e00 of type ^{opaqueCMSampleBuffer=}
+2026-11-04 13:23:40,949 INFO repro 放音 #1: The quick brown fox jumps over the lazy dog.
+2026-11-04 13:23:43,994 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:45,332 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:46,150 INFO repro 放音 #2: Live caption turns whatever the computer plays into subtitles.
+2026-11-04 13:23:48,431 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:49,921 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:23:50,806 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:52,114 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:23:52,311 INFO repro 放音 #3: Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 13:23:53,426 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:55,020 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:23:56,303 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:57,009 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:23:58,745 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:23:58,950 INFO repro 放音结束：收到音频块 940 个，运行中=True
+2026-11-04 13:23:59,522 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:24:00,951 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
+2026-11-04 13:24:01,031 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
+=== attempt 4 exit=0 ===
+=== attempt 5 (subtitles ON) ===
+2026-11-04 13:24:03,152 INFO repro 点击「开始捕获」
+2026-11-04 13:24:03,654 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 13:24:03,655 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 13:24:03,660 INFO repro 点击返回，按钮文字='停止'
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x74d6d21dc0 of type ^{opaqueCMSampleBuffer=}
+2026-11-04 13:24:04,548 INFO repro 放音 #1: The quick brown fox jumps over the lazy dog.
+2026-11-04 13:24:08,973 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:24:09,750 INFO repro 放音 #2: Live caption turns whatever the computer plays into subtitles.
+2026-11-04 13:24:12,633 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:24:14,419 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:24:14,605 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:24:15,911 INFO repro 放音 #3: Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 13:24:16,132 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:24:16,497 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:24:18,076 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:24:18,612 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:24:19,871 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:24:20,584 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:24:22,277 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:24:22,512 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 13:24:22,550 INFO repro 放音结束：收到音频块 943 个，运行中=True
+2026-11-04 13:24:23,745 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 13:24:23,746 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
+2026-11-04 13:24:23,830 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
+=== attempt 5 exit=0 ===

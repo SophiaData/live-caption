@@ -26,6 +26,38 @@
 - 日志：本地文件日志，禁止打印密钥；日志单文件上限 10MB 滚动
 - 错误处理口径：用户可见错误一律给「人话 + 下一步怎么办」；技术细节进日志
 
+## 测试策略与真机天花板（Issue #22 之后补写，防「全绿」再骗人）
+
+**结构性事实：SCK 音频回调这条链，纯单元测试有天花板。** 2026-11-04 老板真机验收发现
+「点开始捕获 → 一放声音就 SIGSEGV」，当时 `make check` 236 项全绿。不是用例写得松，
+而是崩溃条件在单测里**根本不成立**：崩溃发生在 ScreenCaptureKit **自己创建的那条 GCD
+队列线程**上派发**第一帧真 `CMSampleBuffer`** 的那一刻——测试既不建真流、也不放真系统
+声音，喂给 delegate 的永远是合成字节和假 buffer 对象。这件事与「假件 patch 掉 delegate
+类体」是同一个洞的两面：形状不像真机的假件，挡不住真机的回归。
+
+这条链的验证因此分两层，缺一层就是没验：
+
+| 层 | 覆盖得到 | 覆盖不到 | 入口 |
+|---|---|---|---|
+| 单元测试 `tests/test_sck_real_buffer.py` | 真 CoreMedia 对象（`CMSampleBufferCreateReady` 造的 `CMSampleBufferRef`）进 `extract_audio_samples`：正常 / 空数据 / 非预期格式 / 空指针 / 拷贝返回码非 0；真 delegate 类；「开流前必须预热」的调用顺序 | SCK 在自己那条线程上派发首帧、真授权、真放音 | `make check` |
+| 真机脚本 `docs/qa/issue-22/tools/` | 反复起停真流把首帧路径打死（`stress_sessions.py`）；真实窗口点真实按钮 + `say` 放音（`run_capture.py`）；量真帧的 ASBD 形状（`probe_frame_format.py`）与声道存放方式（`probe_channel_layout.py`）；读 macOS 崩溃报告（`read_crash_report.py`） | 不进 CI（要授权、要出声、要人看屏幕） | `docs/qa/issue-22/README.md` |
+
+约定：**改到 `app/capture/sck.py` / `sck_session.py` 的解析或线程边界，除了 `make check`，
+必须再跑 `stress_sessions.py --rounds 14` 与一次 `run_capture.py --subtitles`，把输出贴进
+PR。只交单元测试的改动视为未验。**改到**声道混合/格式判据**时还要跑一次
+`probe_channel_layout.py`（读法错了不崩不报错，只有频谱看得出来）。
+
+另外三条硬规矩（都是这次踩出来的）：
+1. PyObjC 框架模块（CoreMedia 等）的**首次加载必须在主线程、开流之前**完成——
+   落在 SCK 回调线程上就是本票的崩溃现场（绕开预热重算：3 个进程 2 个首帧崩，ADR 20）；
+   热路径（每帧）不许再出现任何 `import`；
+2. 假 CoreMedia 必须用**真机实测的形状**：ASBD 被 PyObjC 13 摊平成 9 元素元组
+   `[采样率, formatID, flags, bytesPerPacket, framesPerPacket, bytesPerFrame, channels,
+   bits, reserved]`，真帧是 `16000 / 'lpcm' / 41 / 2ch / 32bit`、块缓冲 2560 字节/帧
+   （原始输出：`docs/qa/issue-22/logs/frame-format-measured.txt`）；
+3. 送进解析的**第一帧必须是真 buffer**（CoreMedia 构造函数造的那种），而且**左右声道要取不同值**——
+   同值的语音分不清交错与 planar，读反了不崩也不报错（ADR 21）。
+
 ## 依赖登记
 
 | 依赖 | 用途 | 引入理由 | 引入于（功能#） |
@@ -60,6 +92,8 @@
 | 17 | 2026-11-03 | 整句一旦排起队就**自动停补草稿**，队列清空后恢复（`draft_paused`）；管道计时时钟可注入 | 第 5 轮真服务实测（同机同模型、单跑不并发）：关闭 排队中位 0.03s → 开启 2.37s。单 worker 串行 + 调用不可取消，草稿在途时紧随的整句只能等——所以「追不上了就先不加戏」必须是运行时自适应规则，而不是靠人记得关开关。时钟可注入是因为原有用例靠 `time.sleep` 造慢服务，CI 上 sleep 精度不够会飘（macos-14 实测红过一次） | 让草稿和定稿抢同一条队列的先后顺序（改不动排队本质）；给草稿单独开线程（违反「不得改变现有线程模型」）；用墙钟 sleep 写慢服务用例（CI 飘） | 
 | 18 | 2026-11-03 | Apple Silicon 架构由**三道机器门**保证（Issue #20）：① `make check-arch` 断言构建解释器是 arm64（非 darwin 自动跳过，`ALLOW_INTEL=1` 只能显式绕过且打印「已绕过」）② `live-caption.spec` 顶部 `guard_interpreter_for_build()`——绕过 make 直接跑 pyinstaller 也一样中止 ③ `make verify-arch` 逐个校验 `.app`：主程序必须**只有 arm64**，每个 `.so`/`.dylib` 必须**含 arm64**（universal2 的 Qt 轮子含 arm64 即放行；认不出架构的文件算不合格，不静默跳过） | 以前架构全靠 `runs-on: macos-14` 这一行碰运气，流水线里 grep 不到任何架构断言，runner 一换型就静默产出「装得上、跑不动」的 Intel 包。判读用**自己解析 Mach-O 文件头**（`app/release/macho.py`，只读头部几十字节）而不是调 `lipo`：门要能在任何机器上用合成字节做单元测试，也不把发布判定绑在 Xcode 工具链上；CI 仍原样打印 `lipo -archs` 作交叉印证的发布证据（本机实测两边结论一致）。产物名里的架构取自 `lipo` 对**成品主程序**的实测结果，不写死字符串，名字不会骗人。CI 还会把 zip 解开、DMG 挂载后各过一次门（用户实际下载的那两份也验）；`--require` 判据被反向时输出会自报「这不是发布架构」，防止反向验证被当成放行；spec 守卫与两条 make 目标的接线本身有用例钉住（删掉即 `make check` 红） | 只靠 `runs-on` 选型号（无保证）；用 `lipo`/`otool` 实现门（绑 Xcode、测不了）；把 "arm64" 写进产物名（产物是 Intel 也照样叫 arm64）；认不出架构就跳过（等于给门开后门） | 
 | 19 | 2026-11-03 | PyInstaller 显式 `target_arch="arm64"`，`codesign_identity` 保持 None，签名走 CI 里独立的 ad-hoc 步骤 `codesign --force --deep --sign -` | 老板已定只做 Apple Silicon：`target_arch="arm64"` 让 PyInstaller 把启动器 thin 成 arm64，拿不到 arm64 切片就直接报错（`target_arch=None` 的语义正是「跟着构建机走」）。项目没有 Apple Developer 身份，用 `codesign_identity` 会假装签名；ad-hoc 是 Apple 芯片上 arm64 二进制能跑起来的最低要求。**公证（notarization）不在范围**：要 $99/年 账号，`spctl --assess` 实测仍 rejected，用户首次打开需「仍要打开」（见 TD-11） | universal2（老板明确不做）；`target_arch=None`（=现状的问题本身）；在 spec 里填 `codesign_identity`（没有该身份，且会把发布绑到某个证书上） | 
+| 20 | 2026-11-04 | SCK 音频链的 PyObjC 桥**必须在主线程、开流之前加载**（`sck.load_coremedia()`，由 `SCKSession.start()` 调用；加载失败即用人话报错，不许留半启动的流）；delegate 整段回调包在 `objc.autorelease_pool()` 里（卫生措施，不是主闸）；解析链**逐步判空 + 判返回码**，取不到就跳帧并记人话告警 + 计数（`sck.drop_report()`） | Issue #22 真机 SIGSEGV（`KERN_INVALID_ADDRESS at 0x10`，崩溃线程 `com.screenCaptureKit.audioSampleHandlerQueue`，栈在 PyObjC `PyObjCFFI_BuildResult` → `id_to_python` → `objc_msgSend`）。**机制只定位到「哪一次触碰不安全」这一层**：PyObjC 内部到底哪一步坏掉没查清（缺池的常规表现是泄漏并打 `_NSAutoreleaseNoPool`，本机 21 份日志 0 命中），所以两条缓解都上、都由真机脚本盯。PyObjC 的框架模块是惰性的：`import CoreMedia` 时它的 `_setup()` 才去加载框架镜像、注册包装类与函数符号（CoreMedia/`__init__.py` 末尾直接 `globals().pop("_setup")()`），这过程要创建 ObjC 对象；SCK 的音频队列线程不是 Python 建的、没有 autorelease pool，首次加载就在那条线程上发生 → 第一帧必崩。真机差分（入库脚本 `stress_sessions.py` 的开关，`logs/variant-matrix.log`）：**承重的是「主线程预热」**——保留预热、把池换成空上下文 → 3/3 进程 × 6 轮不崩；绕开预热、池仍留着 → 3 个进程里 2 个首轮 SIGSEGV、1 个靠兜底闸跳了 1 帧才活下来。更正一条早先写错的结论：「只加 autorelease pool 也 0/28 轮不崩」是修复前那份临时脚本（形态不同）测出来的，用入库脚本重算**不成立**，所以池不叫第二条防线，只叫「非 Python 建的线程造 ObjC 对象的常规卫生」（入参的 ObjC→Python 转换在 PyObjC 的 method_stub 里，早于函数体，池罩不到）。崩溃的直接触发点是「本进程第一次碰 CoreMedia 落在那条线程上」。判别看**进程数**（首帧加载每进程只发生一次），稳态帧数对这个 bug 没有判别力 | 用 `try/except` 包住解析（Python 抓不到 SIGSEGV，包了等于没包，还会把问题藏起来）；把解析挪回主线程/加队列（改线程模型，超出本票范围，且首帧加载问题依旧）；继续只补单元测试（单测里根本不具备崩的条件，见「测试策略与真机天花板」） |
+| 21 | 2026-11-04 | PCM 的声道混合**必须按 ASBD 的 flags 分支**：带 `kLinearPCMFormatFlagIsNonInterleaved`(1<<5=32) 走 `_planar_to_mono`（前半=左声道、后半=右声道），否则走 `_interleaved_to_mono`。真机 SCK 送来的帧 flags=41 = IsFloat|IsPacked|**IsNonInterleaved**，即**分声道连续存放**，不是交错 | 这是修 #22 时用真机测量纠正的认知：原先以为 `mBytesPerFrame=4` 与「2 声道 32 位」自相矛盾（怀疑 SCK 报错数），其实是**我按交错口径读错了位**（把 NonInterleaved 记成 1<<4）。判定方法：放左 1000Hz / 右 3000Hz 的人造立体声，块缓冲**前半只有 1000、后半只有 3000**（交错的话两半都会同时含两个频率）→ 结论 planar，与 flags=41 的逐位拆解、与 `mBytesPerFrame=4`（每声道口径）三者一致。原始数据 `docs/qa/issue-22/logs/channel-layout-measured.txt`。读反了**不崩也不报错**，只是每个声道被 2 倍抽取（混叠 + 时长减半），识别会变差——所以必须有测试钉住（`tests/test_sck_real_buffer.py` 的两条：planar 与 interleaved 各验一次具体样本值） | 一律按交错解（现状的错误，会长期降低识别质量）；把非交错帧直接跳帧丢弃（改前我差点这么写：真机全是非交错，等于把捕获全丢掉）；用 `AudioBufferList` 的 `mNumberBuffers` 判定（PyObjC 13 这条 API 不接受 ctypes 指针实参，实测报 `depythonifying 'pointer'`；ctypes 直调也没拿到可信结果，最终用频谱法判定） | 
 
 ## 目录结构约定
 

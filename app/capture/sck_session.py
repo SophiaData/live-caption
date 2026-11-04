@@ -29,6 +29,8 @@ from .sck import (
     SCKCaptureError,
     denied_hint,
     extract_audio_samples,
+    load_coremedia,
+    resample_to_16k,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,14 +70,27 @@ def _make_delegate_class() -> Any:
             return self
 
         def stream_didOutputSampleBuffer_ofType_(self, stream, sample_buffer, frame_type):  # type: ignore[no-untyped-def]
+            # 注意：入参（stream / sample_buffer / frame_type）的 ObjC→Python 转换发生在
+            # PyObjC 的 method_stub 里，**早于本函数体**，这里的池罩不到那一步；主闸是
+            # 开流前的主线程预热。池罩的是我们自己解析一帧时造出来的那些桥对象。
             if int(frame_type) != SCK_OUTPUT_TYPE_AUDIO:
                 return
-            parsed = extract_audio_samples(sample_buffer)
-            if parsed is None:
-                return
-            samples, rate = parsed
-            if len(samples) > 0:
-                self._on_audio(samples, rate)
+            # Issue #22：这条回调跑在 ScreenCaptureKit 自己建的 GCD 队列线程上，那条线程
+            # 没有 ObjC autorelease pool；解析一帧要经过 PyObjC 造出格式描述等桥对象。
+            # 这条池**不是** Issue #22 的主闸：入库脚本重算过（--no-pool 3/3 进程不崩、
+            # --no-prewarm 3/3 进程崩），主闸是下面 start() 里的主线程预热。留着它的理由
+            # 是常规卫生——这条线程不是 Python 建的、没有 ObjC autorelease pool，而我们
+            # 在池外还会造出格式描述等桥对象。注意它罩不到入参的 ObjC→Python 转换
+            # （那一步在 PyObjC 的 method_stub 里，早于函数体）。
+            # 只包音频回调这一条路径；SCK 的完成处理器回调（on_content / on_started /
+            # stop）同样在非 Python 线程上收 ObjC 对象，未套池，见 TD-17。
+            with objc.autorelease_pool():
+                parsed = extract_audio_samples(sample_buffer)
+                if parsed is None:
+                    return
+                samples, rate = parsed
+                if len(samples) > 0:
+                    self._on_audio(samples, rate)
 
     _DELEGATE_CLASS = _LCDStreamDelegate
     return _DELEGATE_CLASS
@@ -93,6 +108,15 @@ class SCKSession:
         mods = _sck_modules()
         Quartz = mods["Quartz"]
         sck = mods["sck"]
+
+        # 0. CoreMedia 桥必须在**主线程、开流之前**加载好（Issue #22：真机的崩溃就崩在
+        #    「本进程第一次碰 CoreMedia 发生在 SCK 回调线程上」那几帧）。加载失败直接报错，
+        #    不开半启动的流；另有兜底闸在 sck.extract_audio_samples：没预热时它拒绝在
+        #    非主线程现场加载，宁可跳帧并大声告警。
+        try:
+            load_coremedia()
+        except Exception as e:  # noqa: BLE001 - 加载失败就是没法解析，必须人话报错
+            raise SCKCaptureError(f"音频解析组件加载失败：{e}") from e
 
         # 1. 授权（preflight → 请求弹窗 → 拒绝给指引）
         if not Quartz.CGPreflightScreenCaptureAccess():
@@ -192,9 +216,11 @@ class SCKSession:
                 )
 
     def _on_audio_frame(self, samples: np.ndarray, rate: int) -> None:
-        """delegate 回调（SCK 音频队列线程）：重采样 + 音量，交给上层。"""
-        from .sck import resample_to_16k
+        """delegate 回调（SCK 音频队列线程）：重采样 + 音量，交给上层。
 
+        回调线程里一个 `import` 都不留（Issue #22：首次加载/初始化不能发生在这条线程上），
+        所以 `resample_to_16k` 走模块顶部的 from-import。
+        """
         mono16k = resample_to_16k(samples, rate)
         if len(mono16k) == 0:
             return

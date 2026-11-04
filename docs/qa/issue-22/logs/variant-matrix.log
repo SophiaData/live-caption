@@ -1,0 +1,117 @@
+### variant='--no-prewarm' run=1  (HEAD=b8a9097)
+[stress] HEAD=b8a9097 prewarm=False
+[stress] --no-prewarm：开流前不预热，首帧在回调线程首次触碰 CoreMedia
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x762b73c000 of type ^{opaqueCMSampleBuffer=}
+Fatal Python error: Segmentation fault
+
+Current thread 0x000000016f05f000 (most recent call first):
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/app/capture/sck.py", line 319 in extract_audio_samples
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/docs/qa/issue-22/tools/stress_sessions.py", line 68 in counting_extract
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/app/capture/sck_session.py", line 88 in stream_didOutputSampleBuffer_ofType_
+
+Thread 0x00000001f97a1300 (most recent call first):
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 2011 in _try_wait
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 2053 in _wait
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 1264 in wait
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 1201 in communicate
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 550 in run
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/docs/qa/issue-22/tools/stress_sessions.py", line 91 in main
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/docs/qa/issue-22/tools/stress_sessions.py", line 106 in <module>
+
+Extension modules: numpy._core._multiarray_umath, numpy.linalg._umath_linalg, objc._objc, shiboken6.Shiboken, PySide6.QtCore, PySide6.QtGui, PySide6.QtWidgets, CoreFoundation._CoreFoundation, CoreFoundation._inlines, Foundation._Foundation, Foundation._inlines, AppKit._AppKit, AppKit._inlines, Quartz.CoreGraphics._callbacks, Quartz.CoreGraphics._sortandmap, Quartz.CoreGraphics._CoreGraphics, Quartz.CoreGraphics._inlines, Quartz.ImageKit._ImageKit, Quartz.CoreVideo._CoreVideo, Quartz.QuartzCore._QuartzCore, Quartz.PDFKit._PDFKit, Quartz.QuickLookUI._QuickLookUI, ScreenCaptureKit._ScreenCaptureKit, CoreMedia._CoreMedia, CoreMedia._inlines (total: 25)
+### exit=139
+### variant='--no-prewarm' run=2  (HEAD=b8a9097)
+[stress] HEAD=b8a9097 prewarm=False
+[stress] --no-prewarm：开流前不预热，首帧在回调线程首次触碰 CoreMedia
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x7b077241c0 of type ^{opaqueCMSampleBuffer=}
+Fatal Python error: Segmentation fault
+
+Current thread 0x000000016b9ff000 (most recent call first):
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/app/capture/sck.py", line 319 in extract_audio_samples
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/docs/qa/issue-22/tools/stress_sessions.py", line 68 in counting_extract
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/app/capture/sck_session.py", line 88 in stream_didOutputSampleBuffer_ofType_
+
+Thread 0x00000001f97a1300 (most recent call first):
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 2011 in _try_wait
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 2053 in _wait
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 1264 in wait
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 1201 in communicate
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 550 in run
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/docs/qa/issue-22/tools/stress_sessions.py", line 91 in main
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/docs/qa/issue-22/tools/stress_sessions.py", line 106 in <module>
+
+Extension modules: numpy._core._multiarray_umath, numpy.linalg._umath_linalg, objc._objc, shiboken6.Shiboken, PySide6.QtCore, PySide6.QtGui, PySide6.QtWidgets, CoreFoundation._CoreFoundation, CoreFoundation._inlines, Foundation._Foundation, Foundation._inlines, AppKit._AppKit, AppKit._inlines, Quartz.CoreGraphics._callbacks, Quartz.CoreGraphics._sortandmap, Quartz.CoreGraphics._CoreGraphics, Quartz.CoreGraphics._inlines, Quartz.ImageKit._ImageKit, Quartz.CoreVideo._CoreVideo, Quartz.QuartzCore._QuartzCore, Quartz.PDFKit._PDFKit, Quartz.QuickLookUI._QuickLookUI, ScreenCaptureKit._ScreenCaptureKit, CoreMedia._CoreMedia, CoreMedia._inlines (total: 25)
+### exit=139
+### variant='--no-prewarm' run=3  (HEAD=b8a9097)
+[stress] HEAD=b8a9097 prewarm=False
+[stress] --no-prewarm：开流前不预热，首帧在回调线程首次触碰 CoreMedia
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x776dad01c0 of type ^{opaqueCMSampleBuffer=}
+WARNING:app.capture.sck:音频帧被跳过：这帧没有格式描述（CMSampleBufferGetFormatDescription 返回空）（同类已累计 1 帧）
+[stress] round 1/6 ok buffers=262 parsed=261 dropped=1
+[stress] round 2/6 ok buffers=521 parsed=520 dropped=1
+[stress] round 3/6 ok buffers=780 parsed=779 dropped=1
+[stress] round 4/6 ok buffers=1039 parsed=1038 dropped=1
+[stress] round 5/6 ok buffers=1298 parsed=1297 dropped=1
+[stress] round 6/6 ok buffers=1557 parsed=1556 dropped=1
+[stress] 全部 6 轮完成，未崩溃 stats={'buffers': 1557, 'parsed': 1556, 'dropped': 1}
+### exit=0
+### variant='--no-pool' run=1  (HEAD=b8a9097)
+[stress] HEAD=b8a9097 prewarm=True
+[stress] round 1/6 ok buffers=259 parsed=259 dropped=0
+[stress] round 2/6 ok buffers=518 parsed=518 dropped=0
+[stress] round 3/6 ok buffers=777 parsed=777 dropped=0
+[stress] round 4/6 ok buffers=1036 parsed=1036 dropped=0
+[stress] round 5/6 ok buffers=1295 parsed=1295 dropped=0
+[stress] round 6/6 ok buffers=1554 parsed=1554 dropped=0
+[stress] 全部 6 轮完成，未崩溃 stats={'buffers': 1554, 'parsed': 1554, 'dropped': 0}
+### exit=0
+### variant='--no-pool' run=2  (HEAD=b8a9097)
+[stress] HEAD=b8a9097 prewarm=True
+[stress] round 1/6 ok buffers=259 parsed=259 dropped=0
+[stress] round 2/6 ok buffers=518 parsed=518 dropped=0
+[stress] round 3/6 ok buffers=777 parsed=777 dropped=0
+[stress] round 4/6 ok buffers=1036 parsed=1036 dropped=0
+[stress] round 5/6 ok buffers=1295 parsed=1295 dropped=0
+[stress] round 6/6 ok buffers=1554 parsed=1554 dropped=0
+[stress] 全部 6 轮完成，未崩溃 stats={'buffers': 1554, 'parsed': 1554, 'dropped': 0}
+### exit=0
+### variant='--no-pool' run=3  (HEAD=b8a9097)
+[stress] HEAD=b8a9097 prewarm=True
+[stress] round 1/6 ok buffers=259 parsed=259 dropped=0
+[stress] round 2/6 ok buffers=518 parsed=518 dropped=0
+[stress] round 3/6 ok buffers=777 parsed=777 dropped=0
+[stress] round 4/6 ok buffers=1036 parsed=1036 dropped=0
+[stress] round 5/6 ok buffers=1295 parsed=1295 dropped=0
+[stress] round 6/6 ok buffers=1554 parsed=1554 dropped=0
+[stress] 全部 6 轮完成，未崩溃 stats={'buffers': 1554, 'parsed': 1554, 'dropped': 0}
+### exit=0
+### variant='' run=1  (HEAD=b8a9097)
+[stress] HEAD=b8a9097 prewarm=True
+[stress] round 1/6 ok buffers=259 parsed=259 dropped=0
+[stress] round 2/6 ok buffers=518 parsed=518 dropped=0
+[stress] round 3/6 ok buffers=777 parsed=777 dropped=0
+[stress] round 4/6 ok buffers=1036 parsed=1036 dropped=0
+[stress] round 5/6 ok buffers=1295 parsed=1295 dropped=0
+[stress] round 6/6 ok buffers=1554 parsed=1554 dropped=0
+[stress] 全部 6 轮完成，未崩溃 stats={'buffers': 1554, 'parsed': 1554, 'dropped': 0}
+### exit=0
+### variant='' run=2  (HEAD=b8a9097)
+[stress] HEAD=b8a9097 prewarm=True
+[stress] round 1/6 ok buffers=262 parsed=262 dropped=0
+[stress] round 2/6 ok buffers=521 parsed=521 dropped=0
+[stress] round 3/6 ok buffers=780 parsed=780 dropped=0
+[stress] round 4/6 ok buffers=1039 parsed=1039 dropped=0
+[stress] round 5/6 ok buffers=1298 parsed=1298 dropped=0
+[stress] round 6/6 ok buffers=1557 parsed=1557 dropped=0
+[stress] 全部 6 轮完成，未崩溃 stats={'buffers': 1557, 'parsed': 1557, 'dropped': 0}
+### exit=0
+### variant='' run=3  (HEAD=b8a9097)
+[stress] HEAD=b8a9097 prewarm=True
+[stress] round 1/6 ok buffers=259 parsed=259 dropped=0
+[stress] round 2/6 ok buffers=518 parsed=518 dropped=0
+[stress] round 3/6 ok buffers=777 parsed=777 dropped=0
+[stress] round 4/6 ok buffers=1036 parsed=1036 dropped=0
+[stress] round 5/6 ok buffers=1295 parsed=1295 dropped=0
+[stress] round 6/6 ok buffers=1554 parsed=1554 dropped=0
+[stress] 全部 6 轮完成，未崩溃 stats={'buffers': 1554, 'parsed': 1554, 'dropped': 0}
+### exit=0

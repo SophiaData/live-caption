@@ -1,0 +1,17 @@
+[stress] HEAD=b8a9097 prewarm=True
+[stress] round 1/14 ok buffers=265 parsed=265 dropped=0
+[stress] round 2/14 ok buffers=524 parsed=524 dropped=0
+[stress] round 3/14 ok buffers=783 parsed=783 dropped=0
+[stress] round 4/14 ok buffers=1042 parsed=1042 dropped=0
+[stress] round 5/14 ok buffers=1301 parsed=1301 dropped=0
+[stress] round 6/14 ok buffers=1560 parsed=1560 dropped=0
+[stress] round 7/14 ok buffers=1819 parsed=1819 dropped=0
+[stress] round 8/14 ok buffers=2078 parsed=2078 dropped=0
+[stress] round 9/14 ok buffers=2337 parsed=2337 dropped=0
+[stress] round 10/14 ok buffers=2596 parsed=2596 dropped=0
+[stress] round 11/14 ok buffers=2855 parsed=2855 dropped=0
+[stress] round 12/14 ok buffers=3114 parsed=3114 dropped=0
+[stress] round 13/14 ok buffers=3373 parsed=3373 dropped=0
+[stress] round 14/14 ok buffers=3635 parsed=3635 dropped=0
+[stress] 全部 14 轮完成，未崩溃 stats={'buffers': 3635, 'parsed': 3635, 'dropped': 0}
+final stress exit=0
