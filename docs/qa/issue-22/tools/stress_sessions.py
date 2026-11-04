@@ -5,7 +5,7 @@
     # 修复后应全过
     .venv/bin/python docs/qa/issue-22/tools/stress_sessions.py --rounds 14
 
-    # 想再看一次「改之前为什么必崩」：--no-prewarm 把开流前的主线程预热变成空操作，
+    # 想再看一次「改之前为什么会崩」：--no-prewarm 把开流前的主线程预热变成空操作，
     # 并让本进程第一次触碰 CoreMedia 落回 SCK 的回调线程——首轮就 SIGSEGV（exit 139）。
     .venv/bin/python docs/qa/issue-22/tools/stress_sessions.py --rounds 2 --no-prewarm
 
@@ -42,7 +42,7 @@ def main() -> int:
     p.add_argument(
         "--no-prewarm",
         action="store_true",
-        help="绕开开流前的主线程预热，重现改之前的必崩（会 SIGSEGV，退出码 139）",
+        help="绕开开流前的主线程预热，重现改之前的崩溃（3 个进程里 2 个会 SIGSEGV，退出码 139）",
     )
     args = p.parse_args()
 

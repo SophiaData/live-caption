@@ -11,7 +11,7 @@
 ObjC 对象；那条线程不是 Python 建的。于是紧接着的第一次值转换（PyObjC 把 CoreMedia 的返回值
 变成 Python 对象）对着一个坏指针发消息 → `EXC_BAD_ACCESS / KERN_INVALID_ADDRESS at 0x10` → 段错误。
 
-**承重的那条修法**（差分实验重算过，见下面「两条防线各管什么」）：**把这次加载挪回开流之前的主线程**
+**承重的那条修法**（差分实验重算过，见下面「两条措施各管什么」）：**把这次加载挪回开流之前的主线程**
 （`sck.load_coremedia()`，`SCKSession.start()` 第一步；加载失败直接用人话报错，绝不留半启动的流）。
 另外两条：delegate 回调套 `objc.autorelease_pool()`（那条线程的常规卫生，**不是主闸**）、
 解析链**逐步判空 + 判返回码 + 判格式**并计数吭声（`drop_report()`）。
@@ -48,7 +48,7 @@ caffeinate -di -u -t 300 .venv/bin/python docs/qa/issue-22/tools/run_capture.py 
 # B. 只压捕获链：反复「起真流 → 放一句 → 停流」
 caffeinate -di -u -t 900 .venv/bin/python docs/qa/issue-22/tools/stress_sessions.py --rounds 14
 
-# C. 想看「改之前为什么必崩」——用同一份入库脚本，绕开开流前的主线程预热
+# C. 想看「改之前为什么会崩」——用同一份入库脚本，绕开开流前的主线程预热
 caffeinate -di -u -t 200 .venv/bin/python docs/qa/issue-22/tools/stress_sessions.py --rounds 6 --no-prewarm
 ```
 
@@ -100,7 +100,7 @@ exit=139（SIGSEGV）
 口径说明：这个 bug 每进程只发生一次首帧加载，所以**判别单位是进程数**；
 稳态跑了多少帧只能证明「后面不崩」，不能证明「首帧安全」。
 
-## 两条防线各管什么（差分实验，一次只改一个变量）
+## 两条措施各管什么（差分实验，一次只改一个变量；结论：只有一条是防线）
 
 原始输出 `logs/variant-matrix.log`（入库脚本 `--no-prewarm` / `--no-pool`，每个变体 3 个进程 × 6 轮）：
 
