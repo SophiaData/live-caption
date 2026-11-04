@@ -26,6 +26,7 @@ from __future__ import annotations
 import ctypes
 import struct
 import threading
+from collections.abc import Callable
 from types import SimpleNamespace
 
 import numpy as np
@@ -505,9 +506,17 @@ class TestWarmUpBeforeStream:
             ),
         }
 
+        real_load = sck.load_coremedia
+        seen: dict[str, object] = {}
+
         def spy_load() -> dict[str, object]:
             order.append("load_coremedia")
-            return {}
+            seen["thread"] = (
+                "main" if threading.current_thread() is threading.main_thread() else "other"
+            )
+            bridge = real_load()  # 真的走生产预热，不返回空壳：符号取没取到也要验
+            seen["keys"] = tuple(sorted(bridge))
+            return bridge
 
         monkeypatch.setattr(sck_session, "_sck_modules", lambda: mods)
         monkeypatch.setattr(sck_session, "_make_delegate_class", lambda: FakeDelegate)
@@ -516,20 +525,37 @@ class TestWarmUpBeforeStream:
         sck_session.SCKSession(lambda _block, _level: None).start()
 
         assert order == ["load_coremedia", "addStreamOutput", "startCapture"], order
+        assert seen["thread"] == "main", "预热必须在主线程（这条就是 #22 的根因）"
+        assert seen["keys"] == tuple(sorted(sck._COREMEDIA_FUNCTIONS)), seen["keys"]
 
     def test_start_reports_bridge_load_failure_in_plain_words(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """加载失败也必须是人话错误，不许留下半启动的流。"""
-        from tests.test_assembly_layers import FakeDelegate, fake_sck_modules  # noqa: PLC0415
+        from tests.test_assembly_layers import FakeDelegate  # noqa: PLC0415
 
-        monkeypatch.setattr(sck_session, "_sck_modules", fake_sck_modules)
         monkeypatch.setattr(sck_session, "_make_delegate_class", lambda: FakeDelegate)
 
         def boom() -> dict[str, object]:
             raise ImportError("no CoreMedia")
 
         monkeypatch.setattr(sck_session, "load_coremedia", boom)
+
+        # 预热失败必须在「授权 / 建流」之前止步：让后续每一步一碰就炸，而不是靠返回空壳。
+        def forbidden(step: str) -> Callable[..., None]:
+            def _raise(*_args: object, **_kwargs: object) -> None:
+                raise AssertionError(f"预热失败后不该走到「{step}」")
+
+            return _raise
+
+        mods2 = {
+            "Quartz": SimpleNamespace(
+                CGPreflightScreenCaptureAccess=forbidden("授权检查"),
+                CGRequestScreenCaptureAccess=forbidden("授权请求"),
+            ),
+            "sck": SimpleNamespace(SCStream=SimpleNamespace(alloc=forbidden("建流"))),
+        }
+        monkeypatch.setattr(sck_session, "_sck_modules", lambda: mods2)
 
         with pytest.raises(sck.SCKCaptureError, match="音频解析组件加载失败"):
             sck_session.SCKSession(lambda _block, _level: None).start()
