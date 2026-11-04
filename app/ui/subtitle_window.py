@@ -34,6 +34,7 @@ class SubtitleWindow(QWidget):
     text_arrived = Signal(str, str, int, bool)  # (原文, 译文, 句号, 是否草稿)
     position_changed = Signal(int, int)  # (x, y) 拖动结束时发出，供持久化
     close_requested = Signal()  # 右键「关闭字幕条」
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowFlags(

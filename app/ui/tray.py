@@ -10,9 +10,8 @@
 
 from __future__ import annotations
 
-import sys
-
 import logging
+import sys
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt

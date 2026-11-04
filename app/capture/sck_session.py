@@ -28,7 +28,6 @@ from .sck import (
     TARGET_SAMPLE_RATE,
     SCKCaptureError,
     capture_failed_hint,
-    denied_hint,
     extract_audio_samples,
     load_coremedia,
     resample_to_16k,
