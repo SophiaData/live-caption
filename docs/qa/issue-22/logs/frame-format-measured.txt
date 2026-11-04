@@ -1,4 +1,4 @@
-{"frames": 249, "parsed": 249, "dropped": 0}
+{"frames": 247, "parsed": 247, "dropped": 0}
 [
  {
   "buffer_type": "CMSampleBufferRef",

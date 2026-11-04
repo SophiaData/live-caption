@@ -9,6 +9,8 @@ CoreMedia 构造函数造真对象，覆盖老板点名的三种输入：正常 
 docs/qa/issue-22/README.md）：
 
 - ASBD 由 PyObjC 摊平成 9 元素元组：`[16000.0, 1819304813('lpcm'), 41, 4, 1, 4, 2, 32, 0]`
+  （flags=41 拆位是 IsFloat|IsPacked|**IsNonInterleaved**，mBytesPerFrame=4 是**每声道**，
+  即分声道连续存放；`CMFormatDescriptionGetMediaType` 回 1936684398('soun')）
   → 采样率 / formatID / flags（IsFloat|IsPacked|IsNonMixable）/ bytesPerPacket /
   framesPerPacket / bytesPerFrame / channels / bits / reserved；
 - 每帧块缓冲 2560 字节（= 20ms @16kHz 双声道 float32），`CMBlockBufferCopyDataBytes`
@@ -33,11 +35,23 @@ sck = pytest.importorskip("app.capture.sck", reason="Mac 捕获链")
 CoreMedia = pytest.importorskip("CoreMedia", reason="CoreMedia 只在 macOS 存在")
 
 from app.capture import sck_session  # noqa: E402
-from app.capture.sck import drop_report, extract_audio_samples, load_coremedia, reset_drop_report  # noqa: E402
+from app.capture.sck import (  # noqa: E402
+    drop_details,
+    drop_report,
+    extract_audio_samples,
+    load_coremedia,
+    reset_drop_report,
+)
 
 # 真机实测值（见模块 docstring），不是猜的
 LPCM_FORMAT_ID = 1819304813  # 'lpcm'
-FLOAT32_FLAGS = 41  # IsFloat | IsPacked | IsNonMixable
+# 真机 flags=41 = IsFloat(1) | IsPacked(8) | **IsNonInterleaved(32)**，即分声道连续存放，
+# 配 mBytesPerFrame=4（每声道 4 字节）。用左右声道不同频率的立体声测出来，
+# 见 docs/qa/issue-22/logs/channel-layout-measured.txt。
+FLOAT32_FLAGS = 41
+FLOAT32_PLANAR_BYTES_PER_FRAME = 4
+# 交错口径：flags 不带 32，mBytesPerFrame=声道数×4（真机不是这种，但解析也支持）
+FLOAT32_INTERLEAVED_FLAGS = 9
 INT16_FLAGS = 12  # 有 IsPacked，没有 IsFloat —— 非预期格式
 BYTES_PER_SAMPLE = 4
 
@@ -69,7 +83,10 @@ def build_sample_buffer(
         _keepalive.append(arr)
         replace = CoreMedia.CMBlockBufferReplaceDataBytes(arr, block, 0, len(pcm))
         assert int(replace if not isinstance(replace, tuple) else replace[0]) == 0
-    bytes_per_frame = (bits // 8) * channels
+    # 交错时 mBytesPerFrame 是「一帧所有声道」，planar 时是「一帧一个声道」——
+    # 真机实测正是 planar 且 mBytesPerFrame=4（每声道），这里按同一个口径写。
+    per_channel_bytes = bits // 8
+    bytes_per_frame = per_channel_bytes if flags & 32 else per_channel_bytes * channels
     asbd = (
         float(rate),
         LPCM_FORMAT_ID,
@@ -91,12 +108,26 @@ def build_sample_buffer(
 
 
 def stereo_float32(values: list[float]) -> bytes:
-    """双声道交错 float32（左=values[i]，右=values[i]，与 `say` 的单声道语音一致）。"""
+    """双声道 float32，**分声道连续存放**（真机 SCK 送来的就是这种）：前半是左声道、
+    后半是右声道。这里左右取同值（与 `say` 的单声道语音一致），所以单声道混合的结果
+    就等于 values 本身——断言因此看得见具体数值。
+    """
+    packed = b"".join(struct.pack("<f", v) for v in values)
+    return packed + packed
+
+
+def stereo_float32_interleaved(values: list[float]) -> bytes:
+    """双声道 float32，**交错**存放：L0 R0 L1 R1 …（左右同值，混合结果同样等于 values）。"""
     out = bytearray()
     for v in values:
         out += struct.pack("<f", v)
         out += struct.pack("<f", v)
     return bytes(out)
+
+
+def planar_float32(left: list[float], right: list[float]) -> bytes:
+    """左右声道**不同**的 planar 帧：用来证明两种存放方式不能混着解。"""
+    return b"".join(struct.pack("<f", v) for v in left + right)
 
 
 @pytest.fixture(autouse=True)
@@ -135,9 +166,17 @@ class TestRealCoreMediaBuffer:
         if isinstance(asbd, tuple):
             assert len(asbd) == 9, f"ASBD 形状变了：{asbd!r}"
             fields = sck._asbd_fields(asbd)  # noqa: SLF001 - 就是要验这条解析路径
-            assert fields == (16000, 2, LPCM_FORMAT_ID, FLOAT32_FLAGS, 32)
+            # 第 6 个是 mBytesPerFrame：真机=4（每声道），planar 判据的第二路
+            assert fields == (
+                16000,
+                2,
+                LPCM_FORMAT_ID,
+                FLOAT32_FLAGS,
+                32,
+                FLOAT32_PLANAR_BYTES_PER_FRAME,
+            )
         else:
-            assert sck._asbd_fields(asbd) == (16000, 2, LPCM_FORMAT_ID, FLOAT32_FLAGS, 32)  # noqa: SLF001
+            assert sck._asbd_fields(asbd) == (16000, 2, LPCM_FORMAT_ID, FLOAT32_FLAGS, 32, 4)  # noqa: SLF001
 
     def test_empty_data_buffer_is_skipped_with_readable_reason(self) -> None:
         """空数据：真 sample buffer 但没有数据块 → 跳帧 + 人话记录，不返回垃圾、不崩。"""
@@ -145,7 +184,7 @@ class TestRealCoreMediaBuffer:
         # 「有格式、没数据」的真 buffer —— 正是空数据输入。
         status, fmt = CoreMedia.CMAudioFormatDescriptionCreate(
             None,
-            (16000.0, LPCM_FORMAT_ID, FLOAT32_FLAGS, 8, 1, 8, 2, 32, 0),
+            (16000.0, LPCM_FORMAT_ID, FLOAT32_FLAGS, 4, 1, 4, 2, 32, 0),
             0,
             None,
             0,
@@ -187,7 +226,8 @@ class TestRealCoreMediaBuffer:
         monkeypatch.setattr(sck, "_CM", bridge)  # _CM_MODULE 不动 → 缓存命中这份替身桥
 
         assert extract_audio_samples(sample_buffer) is None
-        assert any("OSStatus=8946" in reason for reason in drop_report()), drop_report()
+        assert any("拷贝 PCM 失败" in reason for reason in drop_report()), drop_report()
+        assert "OSStatus=8946" in " ".join(drop_details().values()), drop_details()
 
 
 class TestRealBufferThroughDelegate:
@@ -249,6 +289,166 @@ class TestRealBufferThroughDelegate:
         assert not thread.is_alive(), "工作线程卡住"
         assert errors == []
         assert results == [n_values] * 200
+
+
+class TestSecondDefenseLineIsPinned:
+    """第二条防线（回调套 autorelease pool）也得有测试钉住，删掉就该红（评审意见）。"""
+
+    def test_audio_frame_callback_enters_and_exits_an_autorelease_pool(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import objc
+
+        events: list[str] = []
+
+        class _SpyPool:
+            def __enter__(self) -> None:
+                events.append("enter")
+
+            def __exit__(self, *_exc: object) -> bool:
+                events.append("exit")
+                return False
+
+        monkeypatch.setattr(objc, "autorelease_pool", lambda: _SpyPool())
+        seen: list[int] = []
+        delegate = (
+            sck_session._make_delegate_class()
+            .alloc()
+            .initWithCallback_(  # type: ignore[attr-defined]
+                lambda samples, _rate: seen.append(len(samples))
+            )
+        )
+        buffer = build_sample_buffer(stereo_float32([0.3, 0.3]), frames=2)
+
+        delegate.stream_didOutputSampleBuffer_ofType_(None, buffer, 1)
+
+        assert events == ["enter", "exit"], f"音频帧必须在池里进出一次：{events}"
+        assert seen == [2]
+
+    def test_non_audio_frame_returns_before_touching_the_bridge(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """视频帧早退：不建池、不解析、不记账（不算丢帧）。"""
+        import objc
+
+        events: list[str] = []
+        monkeypatch.setattr(objc, "autorelease_pool", lambda: events.append("pool") or _NullPool())
+        seen: list[int] = []
+        delegate = (
+            sck_session._make_delegate_class()
+            .alloc()
+            .initWithCallback_(  # type: ignore[attr-defined]
+                lambda samples, _rate: seen.append(len(samples))
+            )
+        )
+
+        delegate.stream_didOutputSampleBuffer_ofType_(
+            None, build_sample_buffer(stereo_float32([0.3, 0.3]), frames=2), 0
+        )
+
+        assert events == [] and seen == [] and drop_report() == {}
+
+
+class _NullPool:
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+
+class TestNoLoadOnForeignThread:
+    """兜底闸：没预热时绝不在回调线程现场加载 CoreMedia——那正是 Issue #22 的崩溃现场。"""
+
+    def test_unwarmed_bridge_refuses_to_load_off_main_thread(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        buffer = build_sample_buffer(stereo_float32([0.25, 0.25]), frames=2)
+        # 模拟「开流前没预热」：桥取不到 + 现场加载禁止
+        monkeypatch.setattr(sck, "_cached_bridge", lambda: None)
+        monkeypatch.setattr(
+            sck,
+            "load_coremedia",
+            lambda: (_ for _ in ()).throw(AssertionError("非主线程不许现场加载 CoreMedia")),
+        )
+        outcome: dict[str, object] = {}
+
+        def work() -> None:
+            outcome["parsed"] = extract_audio_samples(buffer)
+            outcome["drops"] = drop_report()
+
+        thread = threading.Thread(target=work)
+        thread.start()
+        thread.join(timeout=30)
+        assert not thread.is_alive(), "工作线程卡住"
+
+        assert outcome["parsed"] is None
+        assert any("CoreMedia 桥没在开流前" in reason for reason in outcome["drops"]), outcome[
+            "drops"
+        ]
+
+    def test_hot_path_does_no_import_at_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """解析一帧的热路径不执行任何 import——这是「回调线程一个 import 都不留」的实测口径。
+
+        做法：先确保桥已缓存，再把 `builtins.__import__` 换成会炸的版本，解析一帧真 buffer。
+        """
+        buffer = build_sample_buffer(stereo_float32([0.25, 0.25]), frames=2)
+        assert extract_audio_samples(buffer) is not None
+
+        import builtins
+
+        def exploding_import(*_args: object, **_kw: object) -> None:
+            raise AssertionError("热路径里不该再执行 import")
+
+        monkeypatch.setattr(builtins, "__import__", exploding_import)
+        assert extract_audio_samples(buffer) is not None, drop_report()
+
+    def test_bridge_exception_is_accounted_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """桥调用抛 Python 异常时也必须进记账——评审指出老写法只包了第一处调用。"""
+        buffer = build_sample_buffer(stereo_float32([0.25, 0.25]), frames=2)
+        bridge = dict(load_coremedia())
+
+        def boom(*_args: object) -> None:
+            raise TypeError("depythonifying 'pointer', got 'int'")
+
+        bridge["CMAudioFormatDescriptionGetStreamBasicDescription"] = boom  # type: ignore[assignment]
+        monkeypatch.setattr(sck, "_CM", bridge)
+
+        assert extract_audio_samples(buffer) is None
+        assert any("调用 CoreMedia 时出错" in reason for reason in drop_report()), drop_report()
+        assert "depythonifying" in " ".join(drop_details().values()), drop_details()
+
+    def test_planar_frame_mixes_channels_not_adjacent_samples(self) -> None:
+        """真机形状（flags=41 含 NonInterleaved、mBytesPerFrame=4）：左 1000、右 3000
+        这类「两个声道不同」的数据必须按声道混合，不能当交错两两平均。
+
+        这条是回归闸门：把它读成交错会得到 [0.2, 0.35]（L0 与 L1 平均、L1 与 R0 平均），
+        是彻底错的声音，但**不会崩也不会报错**——只能靠这条用例钉住。
+        """
+        left = [0.4, 0.2, 0.6]
+        right = [0.0, 0.6, 0.2]
+        buffer = build_sample_buffer(planar_float32(left, right), frames=3)
+
+        parsed = extract_audio_samples(buffer)
+        assert parsed is not None, drop_report()
+        samples, _rate = parsed
+        expected = [(a + b) / 2 for a, b in zip(left, right, strict=True)]
+        assert list(np.round(samples, 5)) == pytest.approx(expected, abs=1e-5), samples
+
+    def test_interleaved_frame_still_works(self) -> None:
+        """交错帧（flags=9）走另一条混合路径，同样要给出正确答案。"""
+        left = [0.4, 0.2, 0.6]
+        right = [0.0, 0.6, 0.2]
+        interleaved = b"".join(
+            struct.pack("<f", a) + struct.pack("<f", b) for a, b in zip(left, right, strict=True)
+        )
+        buffer = build_sample_buffer(interleaved, frames=3, flags=FLOAT32_INTERLEAVED_FLAGS)
+
+        parsed = extract_audio_samples(buffer)
+        assert parsed is not None, drop_report()
+        samples, _rate = parsed
+        expected = [(a + b) / 2 for a, b in zip(left, right, strict=True)]
+        assert list(np.round(samples, 5)) == pytest.approx(expected, abs=1e-5), samples
 
 
 class TestWarmUpBeforeStream:

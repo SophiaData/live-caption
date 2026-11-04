@@ -70,13 +70,20 @@ def _make_delegate_class() -> Any:
             return self
 
         def stream_didOutputSampleBuffer_ofType_(self, stream, sample_buffer, frame_type):  # type: ignore[no-untyped-def]
+            # 注意：入参（stream / sample_buffer / frame_type）的 ObjC→Python 转换发生在
+            # PyObjC 的 method_stub 里，**早于本函数体**，这里的池罩不到那一步；主闸是
+            # 开流前的主线程预热。池罩的是我们自己解析一帧时造出来的那些桥对象。
             if int(frame_type) != SCK_OUTPUT_TYPE_AUDIO:
                 return
             # Issue #22：这条回调跑在 ScreenCaptureKit 自己建的 GCD 队列线程上，那条线程
-            # 没有 ObjC autorelease pool；解析一帧要经过 PyObjC 造出格式描述等桥对象，
-            # 没有池就可能在回调返回前被过早回收，真机表现为对空 isa 发消息的 SIGSEGV。
-            # 所以整段解析包在 autorelease pool 里（和 sck.load_coremedia() 的主线程预热
-            # 是同一处问题的两条防线）。
+            # 没有 ObjC autorelease pool；解析一帧要经过 PyObjC 造出格式描述等桥对象。
+            # 差分实验（docs/qa/issue-22/README.md）：不改主线程预热、只把这段包进
+            # autorelease pool，压力脚本从 3/3 首轮崩变成 0/28 轮崩。PyObjC 内部到底
+            # 是哪一步坏掉**没有定位**（缺池时 Foundation 的常规表现是泄漏并打
+            # `_NSAutoreleaseNoPool`，而本机 21 份日志里 0 命中），所以这条与
+            # sck.load_coremedia() 的主线程预热是「同一处问题的两条防线」，不是两条结论。
+            # 只包音频回调这一条路径；SCK 的完成处理器回调（on_content / on_started /
+            # stop）同样在非 Python 线程上收 ObjC 对象，未套池，见 TD-17。
             with objc.autorelease_pool():
                 parsed = extract_audio_samples(sample_buffer)
                 if parsed is None:
@@ -102,8 +109,10 @@ class SCKSession:
         Quartz = mods["Quartz"]
         sck = mods["sck"]
 
-        # 0. CoreMedia 桥必须在**主线程、开流之前**加载好（Issue #22：放到音频回调里
-        #    首次加载 = 第一帧必崩）。这里也是「未预热就绝不开流」的硬闸。
+        # 0. CoreMedia 桥必须在**主线程、开流之前**加载好（Issue #22：真机的崩溃就崩在
+        #    「本进程第一次碰 CoreMedia 发生在 SCK 回调线程上」那几帧）。加载失败直接报错，
+        #    不开半启动的流；另有兜底闸在 sck.extract_audio_samples：没预热时它拒绝在
+        #    非主线程现场加载，宁可跳帧并大声告警。
         try:
             load_coremedia()
         except Exception as e:  # noqa: BLE001 - 加载失败就是没法解析，必须人话报错

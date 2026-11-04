@@ -61,7 +61,9 @@ def main() -> int:
 
     session = sck_session.SCKSession(lambda _block, _level: None)
     session.start()
-    subprocess.run(["say", "-v", "Samantha", "Probing the real frame shape, one two three"], check=False)
+    subprocess.run(
+        ["say", "-v", "Samantha", "Probing the real frame shape, one two three"], check=False
+    )
     deadline = time.monotonic() + 1.0
     while time.monotonic() < deadline:
         app.processEvents()
@@ -69,7 +71,15 @@ def main() -> int:
     session.stop()
     app.processEvents()
 
-    print(json.dumps({"frames": counters["frames"], "parsed": counters["parsed"], "dropped": counters["dropped"]}))
+    print(
+        json.dumps(
+            {
+                "frames": counters["frames"],
+                "parsed": counters["parsed"],
+                "dropped": counters["dropped"],
+            }
+        )
+    )
     print(json.dumps(records, indent=1, default=str))
     return 0
 
