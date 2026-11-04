@@ -12,8 +12,8 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtGui import QContextMenuEvent, QMouseEvent
+from PySide6.QtWidgets import QLabel, QMenu, QVBoxLayout, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class SubtitleWindow(QWidget):
 
     text_arrived = Signal(str, str, int, bool)  # (原文, 译文, 句号, 是否草稿)
     position_changed = Signal(int, int)  # (x, y) 拖动结束时发出，供持久化
-
+    close_requested = Signal()  # 右键「关闭字幕条」
     def __init__(self) -> None:
         super().__init__()
         self.setWindowFlags(
@@ -42,6 +42,11 @@ class SubtitleWindow(QWidget):
             | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # 整个窗口区域都必须吃掉鼠标事件：透明背景在 macOS 上会让"空白处"的点击
+        # 穿透到下层窗口（主窗口的「字幕设置…」按钮就排在下面），表现为
+        # "点字幕条却弹出设置对话框"。显式关闭穿透即可彻底杜绝。
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
         # macOS：让窗口浮在所有 app 之上（含全屏应用、菜单栏层）
         self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
         self.resize(960, 170)
@@ -159,6 +164,18 @@ class SubtitleWindow(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_offset = event.globalPosition().toPoint() - self.pos()
             event.accept()
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802 - Qt 命名
+        """右键菜单：tooltip 一直宣称「右键可关闭」，此前从未实现。"""
+        menu = QMenu(self)
+        hide_action = menu.addAction("隐藏字幕条")
+        menu.addSeparator()
+        close_action = menu.addAction("关闭字幕条")
+        chosen = menu.exec(event.globalPos())
+        if chosen is hide_action:
+            self.hide()
+        elif chosen is close_action:
+            self.close_requested.emit()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt 命名
         if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:

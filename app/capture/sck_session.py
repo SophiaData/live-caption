@@ -27,6 +27,7 @@ from .sck import (
     SCK_OUTPUT_TYPE_AUDIO,
     TARGET_SAMPLE_RATE,
     SCKCaptureError,
+    capture_failed_hint,
     denied_hint,
     extract_audio_samples,
     load_coremedia,
@@ -118,11 +119,16 @@ class SCKSession:
         except Exception as e:  # noqa: BLE001 - 加载失败就是没法解析，必须人话报错
             raise SCKCaptureError(f"音频解析组件加载失败：{e}") from e
 
-        # 1. 授权（preflight → 请求弹窗 → 拒绝给指引）
+        # 1. 授权：preflight 只用来决定"要不要弹一次系统申请框"，绝不用来断定用户拒绝。
+        #    背景：CGPreflightScreenCaptureAccess() 判断的是「当前进程」的授权且有缓存；
+        #    对 ad-hoc 签名的包（本项目的分发方式）即便系统开关是开的，也常常返回 False。
+        #    曾经因此把"探测失败"断言成"用户没授权"，把人引向一个早就勾着的开关。
+        #    真正的判据只能是：能不能真的建流成功（见下面第 2 步）。
         if not Quartz.CGPreflightScreenCaptureAccess():
-            granted = Quartz.CGRequestScreenCaptureAccess()
-            if not granted:
-                raise SCKCaptureError(denied_hint())
+            # 这一步会让系统把本应用登记进「录屏与系统录音」列表。
+            # 返回值同样不可信（ad-hoc 包可能返回 False 但仍能在设置里看到本应用），
+            # 所以无论真假都继续往下试真建流。
+            Quartz.CGRequestScreenCaptureAccess()
 
         # 2. 拿显示器（同步等回调，上限 15 秒）
         content_box: list[Any] = []
@@ -133,12 +139,10 @@ class SCKSession:
         sck.SCShareableContent.getShareableContentWithCompletionHandler_(on_content)
         self._pump_until(lambda: bool(content_box), timeout_s=15.0)
         if not content_box:
-            raise SCKCaptureError("获取屏幕内容超时，请重试。")
+            raise SCKCaptureError(capture_failed_hint("获取屏幕内容超时（15 秒无响应）"))
         content, error = content_box[0]
         if content is None:
-            raise SCKCaptureError(
-                f"获取屏幕内容失败：{error}。\n请确认已在本软件的「屏幕录制」授权中允许。"
-            )
+            raise SCKCaptureError(capture_failed_hint(f"系统拒绝提供屏幕内容：{error}"))
         displays = content.displays()
         if not displays or len(displays) == 0:
             raise SCKCaptureError("未找到活动的显示器，无法捕获声音。")

@@ -21,7 +21,10 @@ class TestVersionGate:
 
     def test_hints_are_actionable(self) -> None:
         assert "macOS 13" in unsupported_hint() or "macOS" in unsupported_hint()
-        assert "屏幕录制" in denied_hint()
+        # macOS 13 起该设置页叫「录屏与系统录音」；写旧名会让用户照着找不到
+        assert "录屏与系统录音" in denied_hint()
+        # 文案不得再断言"未获得授权"（ad-hoc 签名下 preflight 会误报，见 Issue #24）
+        assert "未获得" not in denied_hint()
 
 
 class TestAudioProcessing:

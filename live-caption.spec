@@ -49,7 +49,8 @@ a = Analysis(
     ["run_app.py"],
     pathex=[".", "app"],
     binaries=[],
-    datas=[],
+    # 图标要在运行时也能读到（菜单栏/窗口图标），所以随包分发一份
+    datas=[("assets/live-caption.icns", "assets")],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -109,7 +110,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="live-caption.app",
-    icon=None,
+    icon="assets/live-caption.icns",  # 深色圆角方块 + 字幕横线（2026-11-05 加）
     bundle_identifier="com.sophiadata.livecaption",
     info_plist={
         "CFBundleName": "live-caption",

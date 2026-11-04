@@ -143,6 +143,9 @@ class CaptureTestWindow(QMainWindow):
         self._toggle_btn = QPushButton("开始捕获")
         btn_row.addWidget(self._toggle_btn)
         self._settings_btn = QPushButton("字幕设置…")
+        # 不做默认按钮：避免任何"意外回车/误触"直接弹出设置（曾出现点字幕条弹设置）
+        self._settings_btn.setAutoDefault(False)
+        self._settings_btn.setDefault(False)
         self._settings_btn.clicked.connect(self.open_settings)
         btn_row.addWidget(self._settings_btn)
         layout.addLayout(btn_row)

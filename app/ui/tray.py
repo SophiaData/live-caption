@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import logging
 from collections.abc import Callable
 
@@ -21,7 +23,25 @@ logger = logging.getLogger(__name__)
 
 
 def _make_icon(color: str = "#4A90D9") -> QIcon:
-    """生成一个简单圆形图标（避免依赖外部图片资源）。"""
+    """菜单栏图标：优先用项目真图标，取不到再退回画一个圆点。
+
+    以前这里只画蓝圆（注释还写着"避免依赖外部图片资源"），菜单栏上认不出是谁。
+    """
+    from pathlib import Path
+
+    here = Path(__file__).resolve().parent.parent.parent
+    for cand in (
+        here / "assets" / "live-caption.icns",
+        Path(getattr(sys, "_MEIPASS", "")) / "assets" / "live-caption.icns",
+    ):
+        try:
+            if cand.is_file():
+                icon = QIcon(str(cand))
+                if not icon.isNull():
+                    return icon
+        except OSError:
+            continue
+    # 兜底：旧行为（资源缺失时也不能没有图标）
     pix = QPixmap(22, 22)
     pix.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pix)

@@ -373,7 +373,7 @@ def test_sck_session_content_error_is_user_facing(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(sck_session, "_sck_modules", lambda: mods)
     session = sck_session.SCKSession(lambda _block, _level: None)
 
-    with pytest.raises(SCKCaptureError, match="获取屏幕内容失败"):
+    with pytest.raises(SCKCaptureError, match="捕获启动失败"):
         session.start()
 
 
