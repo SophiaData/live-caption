@@ -97,8 +97,8 @@ A 手工同款 5 次崩 1 次（其余 4 次运气好没撞上）；老板真机
 
 
 ```
-2026-11-04 14:39:51,535 INFO repro 点击「开始捕获」
-2026-11-04 14:39:52,076 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 15:32:12,537 INFO repro 点击「开始捕获」
+2026-11-04 15:32:13,050 INFO app.capture.sck_session SCK 流已启动
 2026-11-04 15:35:18,843 INFO repro soak 结束 186s：收到音频块 9288 个，运行中=True，解析跳帧=无
 2026-11-04 15:35:20,892 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
 ```
@@ -108,8 +108,9 @@ A 手工同款 5 次崩 1 次（其余 4 次运气好没撞上）；老板真机
 字幕抽样（原文 / 译文都真的出来了）：
 
 ```
-15:32:22  原文='The quick brown fox jumps over the lazy dog.'  译文='敏捷的棕狐跳过懒狗。'
-15:35:15  原文='W brown f jumps over the lazy dog.'  译文='棕色的狐狸跳过了懒狗。'
+15:32:23  原文='The quick brown fox jumps over the lazy dogg.'  译文='敏捷的棕色狐狸跳过了懒狗。'
+15:32:25  原文='My cap turns whatever the computer plays.'  译文='我的帽子能转换电脑播放的任何内容。'
+15:32:27  原文='看一下。'  译文='Take a look.'
 ```
 
 ## 要求 2：空值与返回码防护（不再静默丢帧）
