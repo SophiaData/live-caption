@@ -1,0 +1,11 @@
+2026-11-04 13:18:55,138 INFO repro 点击「开始捕获」
+2026-11-04 13:18:58,363 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 13:18:58,363 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 13:18:58,369 INFO repro 点击返回，按钮文字='停止'
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x77de6e24c0 of type ^{opaqueCMSampleBuffer=}
+2026-11-04 13:18:58,994 INFO repro 放音 #1: The quick brown fox jumps over the lazy dog.
+2026-11-04 13:19:04,646 INFO repro 放音 #2: Live caption turns whatever the computer plays into subtitles.
+2026-11-04 13:19:10,726 INFO repro 放音结束：收到音频块 618 个，运行中=True
+2026-11-04 13:19:10,726 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
+2026-11-04 13:19:10,763 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）
+EXIT=0

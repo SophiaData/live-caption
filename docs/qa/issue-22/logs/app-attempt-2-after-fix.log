@@ -1,0 +1,36 @@
+2026-11-04 14:38:22,646 INFO repro 点击「开始捕获」
+2026-11-04 14:38:23,194 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 14:38:23,194 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 14:38:23,199 INFO repro 点击返回，按钮文字='停止'
+2026-11-04 14:38:24,087 INFO repro 放音 #1: The quick brown fox jumps over the lazy dog.
+2026-11-04 14:38:26,932 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:26,933 INFO repro 字幕｜原文='可不.' 译文=''
+2026-11-04 14:38:28,158 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:28,159 INFO repro 字幕｜原文='The quick brown box jump.' 译文=''
+2026-11-04 14:38:28,433 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:28,433 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dog.' 译文=''
+2026-11-04 14:38:29,289 INFO repro 放音 #2: Live caption turns whatever the computer plays into subtitles.
+2026-11-04 14:38:30,529 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 14:38:30,530 INFO repro 字幕｜原文='The quick brown fox jumps over the lazy dog.' 译文='敏捷的棕色狐狸跳过了懒狗。'
+2026-11-04 14:38:32,186 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:32,187 INFO repro 字幕｜原文='My catch can.' 译文=''
+2026-11-04 14:38:33,524 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:33,524 INFO repro 字幕｜原文='My cap canラ.' 译文=''
+2026-11-04 14:38:35,131 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:35,131 INFO repro 字幕｜原文='My caption turns the computer plays.' 译文=''
+2026-11-04 14:38:35,450 INFO repro 放音 #3: Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 14:38:36,594 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 14:38:36,594 INFO repro 字幕｜原文='My caption turns the computer plays.' 译文='我的字幕会让电脑播放。'
+2026-11-04 14:38:36,766 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:36,766 INFO repro 字幕｜原文='看下。' 译文=''
+2026-11-04 14:38:38,732 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 14:38:38,733 INFO repro 字幕｜原文='看下。' 译文='Take a look.'
+2026-11-04 14:38:40,903 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:40,904 INFO repro 字幕｜原文='不用家吃贴。' 译文=''
+2026-11-04 14:38:41,437 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:41,438 INFO repro 字幕｜原文='Seen touch take over for you allo sample。' 译文=''
+2026-11-04 14:38:42,090 INFO repro 放音结束：收到音频块 944 个，运行中=True
+2026-11-04 14:38:42,936 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 14:38:42,937 INFO repro 字幕｜原文='Seen touch take over for you allo sample。' 译文='看到触摸代替你进行采样。'
+2026-11-04 14:38:42,938 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
+2026-11-04 14:38:42,971 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）

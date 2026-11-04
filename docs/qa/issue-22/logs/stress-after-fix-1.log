@@ -1,0 +1,15 @@
+[stress] round 1/14 ok (start 0.42s) buffers=119 rss=119952MB
+[stress] round 2/14 ok (start 0.18s) buffers=318 rss=119952MB
+[stress] round 3/14 ok (start 0.18s) buffers=517 rss=119952MB
+[stress] round 4/14 ok (start 0.18s) buffers=716 rss=119952MB
+[stress] round 5/14 ok (start 0.19s) buffers=915 rss=119952MB
+[stress] round 6/14 ok (start 0.18s) buffers=1114 rss=119952MB
+[stress] round 7/14 ok (start 0.18s) buffers=1313 rss=119952MB
+[stress] round 8/14 ok (start 0.18s) buffers=1512 rss=119952MB
+[stress] round 9/14 ok (start 0.16s) buffers=1711 rss=119952MB
+[stress] round 10/14 ok (start 0.19s) buffers=1910 rss=119952MB
+[stress] round 11/14 ok (start 0.19s) buffers=2109 rss=119952MB
+[stress] round 12/14 ok (start 0.18s) buffers=2308 rss=119952MB
+[stress] round 13/14 ok (start 0.20s) buffers=2507 rss=119952MB
+[stress] round 14/14 ok (start 0.18s) buffers=2706 rss=119952MB
+[stress] 全部 14 轮完成，未崩溃 stats={'buffers': 2706, 'ok': 2706, 'none': 0}

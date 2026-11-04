@@ -1,0 +1,16 @@
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x7691af41c0 of type ^{opaqueCMSampleBuffer=}
+[stress] round 1/14 ok (start 0.32s)
+[stress] round 2/14 ok (start 0.19s)
+[stress] round 3/14 ok (start 0.19s)
+[stress] round 4/14 ok (start 0.19s)
+[stress] round 5/14 ok (start 0.16s)
+[stress] round 6/14 ok (start 0.19s)
+[stress] round 7/14 ok (start 0.20s)
+[stress] round 8/14 ok (start 0.19s)
+[stress] round 9/14 ok (start 0.20s)
+[stress] round 10/14 ok (start 0.19s)
+[stress] round 11/14 ok (start 0.19s)
+[stress] round 12/14 ok (start 0.19s)
+[stress] round 13/14 ok (start 0.18s)
+[stress] round 14/14 ok (start 0.19s)
+[stress] 全部 14 轮完成，未崩溃 stats={'buffers': 2780, 'ok': 2779, 'none': 1}

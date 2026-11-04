@@ -1,0 +1,17 @@
+sys:1: ObjCPointerWarning: PyObjCPointer created: at 0x7a8fdb0000 of type ^{opaqueCMSampleBuffer=}
+Fatal Python error: Segmentation fault
+
+Current thread 0x000000016fdef000 (most recent call first):
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/app/capture/sck.py", line 93 in extract_audio_samples
+  File "/tmp/stress_sck.py", line 43 in _counting_extract
+  File "/Users/gaotingkai/.dsh/state/superagent/work/fix-capture-sigsegv-838f314ef094/app/capture/sck_session.py", line 73 in stream_didOutputSampleBuffer_ofType_
+
+Thread 0x00000001f97a1300 (most recent call first):
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 2011 in _try_wait
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 2053 in _wait
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 1264 in wait
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 1201 in communicate
+  File "/Users/gaotingkai/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/subprocess.py", line 550 in run
+  File "/tmp/stress_sck.py", line 89 in <module>
+
+Extension modules: objc._objc, numpy._core._multiarray_umath, numpy.linalg._umath_linalg, shiboken6.Shiboken, PySide6.QtCore, PySide6.QtGui, PySide6.QtWidgets, CoreFoundation._CoreFoundation, CoreFoundation._inlines, Foundation._Foundation, Foundation._inlines, AppKit._AppKit, AppKit._inlines, Quartz.CoreGraphics._callbacks, Quartz.CoreGraphics._sortandmap, Quartz.CoreGraphics._CoreGraphics, Quartz.CoreGraphics._inlines, Quartz.ImageKit._ImageKit, Quartz.CoreVideo._CoreVideo, Quartz.QuartzCore._QuartzCore, Quartz.PDFKit._PDFKit, Quartz.QuickLookUI._QuickLookUI, ScreenCaptureKit._ScreenCaptureKit, CoreMedia._CoreMedia, CoreMedia._inlines (total: 25)

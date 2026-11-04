@@ -208,6 +208,12 @@ PCM_48K_STEREO = np.ones(4800 * 2, dtype=np.float32).tobytes()
 class _FakeCoreMedia:
     """CoreMedia 替身：48kHz、双声道交错的 4800 帧满量程 float32 PCM。
 
+    ASBD 用**真机实测的形状**（Issue #22，探针输出见 docs/qa/issue-22/logs/
+    frame-format-measured.txt）：PyObjC 13 把 AudioStreamBasicDescription 摊平成
+    9 元素元组 [采样率, formatID('lpcm'), flags, bytesPerPacket, framesPerPacket,
+    bytesPerFrame, channels, bitsPerChannel, reserved]。以前这里写的是 7 元素
+    (48000, 0, 0, 0, 0, 0, 2)——formatID/位深全 0，正是「假件不像真机」的一部分。
+
     带令牌校验：只认测试指定的那块 sample_buffer；生产如果把别的对象（例如 stream）
     传进解析，这里就返回 None，按「非音频帧」跳过。copy_status 非 0 模拟 PCM 拷贝失败。
     """
@@ -224,7 +230,10 @@ class _FakeCoreMedia:
 
     @classmethod
     def CMAudioFormatDescriptionGetStreamBasicDescription(cls, fmt: object) -> object:
-        return (48000, 0, 0, 0, 0, 0, 2) if fmt is cls._FMT else None
+        if fmt is not cls._FMT:
+            return None
+        # 48kHz / 'lpcm' / float32+packed+non-mixable / 8 字节一帧 / 2 声道 / 32 位
+        return (48000, 1819304813, 41, 8, 1, 8, 2, 32, 0)
 
     @classmethod
     def CMSampleBufferGetDataBuffer(cls, sample_buffer: object) -> object:

@@ -1,0 +1,18 @@
+2026-11-04 14:38:45,090 INFO repro 点击「开始捕获」
+2026-11-04 14:38:45,598 INFO app.capture.sck_session SCK 流已启动
+2026-11-04 14:38:45,598 INFO app.capture.sck_capture ScreenCaptureKit 系统声音捕获已启动
+2026-11-04 14:38:45,603 INFO repro 点击返回，按钮文字='停止'
+2026-11-04 14:38:46,490 INFO repro 放音 #1: The quick brown fox jumps over the lazy dog.
+2026-11-04 14:38:51,689 INFO repro 放音 #2: Live caption turns whatever the computer plays into subtitles.
+2026-11-04 14:38:57,850 INFO repro 放音 #3: Screen capture kit delivers real audio sample buffers to the callback.
+2026-11-04 14:38:59,732 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:38:59,734 INFO repro 字幕｜原文='There brown.' 译文=''
+2026-11-04 14:39:00,150 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:39:00,150 INFO repro 字幕｜原文='The quick brown box jump over the lazyy dog.😊' 译文=''
+2026-11-04 14:39:01,496 INFO httpx HTTP Request: POST http://127.0.0.1:3425/v1/chat/completions "HTTP/1.1 200 OK"
+2026-11-04 14:39:01,497 INFO repro 字幕｜原文='The quick brown box jump over the lazyy dog.😊' 译文='敏捷的棕色盒子跳过了懒惰的狗。😊'
+2026-11-04 14:39:04,489 INFO repro 放音结束：收到音频块 944 个，运行中=True
+2026-11-04 14:39:04,974 INFO httpx HTTP Request: POST https://api.siliconflow.cn/v1/audio/transcriptions "HTTP/1.1 200 OK"
+2026-11-04 14:39:04,975 INFO repro 字幕｜原文='My cap turns, whatever the computer plays into.' 译文=''
+2026-11-04 14:39:06,491 INFO app.capture.sck_capture ScreenCaptureKit 捕获已停止
+2026-11-04 14:39:06,508 INFO repro 事件循环退出 rc=0（139=SIGSEGV，段错误）

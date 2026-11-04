@@ -29,6 +29,7 @@ from .sck import (
     SCKCaptureError,
     denied_hint,
     extract_audio_samples,
+    load_coremedia,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,12 +71,18 @@ def _make_delegate_class() -> Any:
         def stream_didOutputSampleBuffer_ofType_(self, stream, sample_buffer, frame_type):  # type: ignore[no-untyped-def]
             if int(frame_type) != SCK_OUTPUT_TYPE_AUDIO:
                 return
-            parsed = extract_audio_samples(sample_buffer)
-            if parsed is None:
-                return
-            samples, rate = parsed
-            if len(samples) > 0:
-                self._on_audio(samples, rate)
+            # Issue #22：这条回调跑在 ScreenCaptureKit 自己建的 GCD 队列线程上，那条线程
+            # 没有 ObjC autorelease pool；解析一帧要经过 PyObjC 造出格式描述等桥对象，
+            # 没有池就可能在回调返回前被过早回收，真机表现为对空 isa 发消息的 SIGSEGV。
+            # 所以整段解析包在 autorelease pool 里（和 sck.load_coremedia() 的主线程预热
+            # 是同一处问题的两条防线）。
+            with objc.autorelease_pool():
+                parsed = extract_audio_samples(sample_buffer)
+                if parsed is None:
+                    return
+                samples, rate = parsed
+                if len(samples) > 0:
+                    self._on_audio(samples, rate)
 
     _DELEGATE_CLASS = _LCDStreamDelegate
     return _DELEGATE_CLASS
@@ -93,6 +100,13 @@ class SCKSession:
         mods = _sck_modules()
         Quartz = mods["Quartz"]
         sck = mods["sck"]
+
+        # 0. CoreMedia 桥必须在**主线程、开流之前**加载好（Issue #22：放到音频回调里
+        #    首次加载 = 第一帧必崩）。这里也是「未预热就绝不开流」的硬闸。
+        try:
+            load_coremedia()
+        except Exception as e:  # noqa: BLE001 - 加载失败就是没法解析，必须人话报错
+            raise SCKCaptureError(f"音频解析组件加载失败：{e}") from e
 
         # 1. 授权（preflight → 请求弹窗 → 拒绝给指引）
         if not Quartz.CGPreflightScreenCaptureAccess():

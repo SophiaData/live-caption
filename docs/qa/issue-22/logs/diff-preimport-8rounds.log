@@ -1,0 +1,10 @@
+[stress] CoreMedia 函数已在主线程预热
+[stress] round 1/8 ok (start 0.29s) buffers=199 rss=112192MB
+[stress] round 2/8 ok (start 0.18s) buffers=398 rss=112384MB
+[stress] round 3/8 ok (start 0.19s) buffers=597 rss=112384MB
+[stress] round 4/8 ok (start 0.18s) buffers=796 rss=112384MB
+[stress] round 5/8 ok (start 0.21s) buffers=995 rss=112400MB
+[stress] round 6/8 ok (start 0.18s) buffers=1192 rss=112416MB
+[stress] round 7/8 ok (start 0.18s) buffers=1391 rss=112448MB
+[stress] round 8/8 ok (start 0.18s) buffers=1588 rss=112448MB
+[stress] 全部 8 轮完成，未崩溃 stats={'buffers': 1588, 'ok': 1588, 'none': 0}

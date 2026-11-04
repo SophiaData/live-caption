@@ -1,0 +1,38 @@
+=== python3.12-2026-11-04-125230.ips（2026-11-04 12:52:30.00 +0800）===
+异常：{'codes': '0x0000000000000001, 0x0000000000000010', 'rawCodes': [1, 16], 'type': 'EXC_BAD_ACCESS', 'signal': 'SIGSEGV', 'subtype': 'KERN_INVALID_ADDRESS at 0x0000000000000010'}
+终止：{'flags': 0, 'code': 11, 'namespace': 'SIGNAL', 'indicator': 'Segmentation fault: 11', 'byProc': 'exc handler', 'byPid': 67643}
+崩溃线程 #7：name=None queue='com.screenCaptureKit.audioSampleHandlerQueue'
+  #0  libobjcMsgSend.dylib               +2080     objc_msgSend
+  #1  _objc.cpython-312-darwin.so        +561940   id_to_python:3403
+  #2  _objc.cpython-312-darwin.so        +561940   ID_to_py:170
+  #3  _objc.cpython-312-darwin.so        +451160   pythonify_c_value:2192
+  #4  _objc.cpython-312-darwin.so        +354328   pythonify_c_return_value:2448
+  #5  _objc.cpython-312-darwin.so        +354328   PyObjCFFI_BuildResult:4143
+  #6  _objc.cpython-312-darwin.so        +543132   func_vectorcall:301
+  #7  python3.12                         +1064760  _PyEval_EvalFrameDefault
+  #8  python3.12                         +574924   PyObject_Vectorcall
+  #9  python3.12                         +574924   PyObject_Vectorcall
+  #10 _objc.cpython-312-darwin.so        +335400   method_stub:1645
+  #11 libffi.dylib                       +72328    ffi_closure_SYSV_inner
+  #12 libffi.dylib                       +33256    ffi_closure_SYSV
+  #13 ScreenCaptureKit                   +205952   __59-[SCStream(SCContentSharing) startRemoteAudioReceiveQueue:]_block_invoke
+
+=== python3.12-2026-11-04-125512.ips（2026-11-04 12:55:12.00 +0800）===
+异常：{'codes': '0x0000000000000001, 0x00000080a35e6661', 'rawCodes': [1, 552496686689], 'type': 'EXC_BAD_ACCESS', 'signal': 'SIGSEGV', 'subtype': 'KERN_INVALID_ADDRESS at 0x00000080a35e6661'}
+终止：{'flags': 0, 'code': 11, 'namespace': 'SIGNAL', 'indicator': 'Segmentation fault: 11', 'byProc': 'exc handler', 'byPid': 71130}
+崩溃线程 #7：name=None queue='com.screenCaptureKit.audioSampleHandlerQueue'
+  #0  CoreFoundation                     +1491820  -[NSIndirectTaggedPointerString getCharacters:range:]
+  #1  _objc.cpython-312-darwin.so        +501716   PyObjCUnicode_New:204
+  #2  _objc.cpython-312-darwin.so        +451160   pythonify_c_value:2192
+  #3  _objc.cpython-312-darwin.so        +354328   pythonify_c_return_value:2448
+  #4  _objc.cpython-312-darwin.so        +354328   PyObjCFFI_BuildResult:4143
+  #5  _objc.cpython-312-darwin.so        +543132   func_vectorcall:301
+  #6  python3.12                         +1064760  _PyEval_EvalFrameDefault
+  #7  python3.12                         +574924   PyObject_Vectorcall
+  #8  python3.12                         +574924   PyObject_Vectorcall
+  #9  _objc.cpython-312-darwin.so        +335400   method_stub:1645
+  #10 libffi.dylib                       +72328    ffi_closure_SYSV_inner
+  #11 libffi.dylib                       +33256    ffi_closure_SYSV
+  #12 ScreenCaptureKit                   +205952   __59-[SCStream(SCContentSharing) startRemoteAudioReceiveQueue:]_block_invoke
+  #13 CMCapture                          +1940308  __FigRemoteOperationReceiverCreateMessageReceiver_block_invoke
+

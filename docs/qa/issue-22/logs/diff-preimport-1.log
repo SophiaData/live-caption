@@ -1,0 +1,16 @@
+[stress] CoreMedia 函数已在主线程预热
+[stress] round 1/14 ok (start 0.33s)
+[stress] round 2/14 ok (start 0.19s)
+[stress] round 3/14 ok (start 0.16s)
+[stress] round 4/14 ok (start 0.19s)
+[stress] round 5/14 ok (start 0.18s)
+[stress] round 6/14 ok (start 0.19s)
+[stress] round 7/14 ok (start 0.19s)
+[stress] round 8/14 ok (start 0.18s)
+[stress] round 9/14 ok (start 0.19s)
+[stress] round 10/14 ok (start 0.20s)
+[stress] round 11/14 ok (start 0.19s)
+[stress] round 12/14 ok (start 0.19s)
+[stress] round 13/14 ok (start 0.19s)
+[stress] round 14/14 ok (start 0.19s)
+[stress] 全部 14 轮完成，未崩溃 stats={'buffers': 2790, 'ok': 2790, 'none': 0}
