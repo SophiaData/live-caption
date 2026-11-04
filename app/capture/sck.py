@@ -187,10 +187,11 @@ def load_coremedia() -> dict[str, Any]:
     它自己的 `_setup()`——加载框架镜像、注册包装类与函数符号，这过程要创建 ObjC 对象。
     这件事原先发生在 ScreenCaptureKit **自己创建**的那条音频队列线程上（崩溃报告线程名
     `com.screenCaptureKit.audioSampleHandlerQueue`）：那条线程不是 Python 建的，也没有
-    ObjC autorelease pool。差分实验（同一压力脚本，一次只改一个变量）：
-    现状 3/3 在首轮会话的最初几帧 SIGSEGV；只在主线程 `import CoreMedia` 0/6 轮；
-    再额外解析函数符号 0/36 轮；只把回调包进 autorelease pool 0/28 轮。
-    → 加载与池子是同一处问题的两面，两条防线都进代码。
+    ObjC autorelease pool。差分实验（入库脚本 `stress_sessions.py --no-prewarm / --no-pool`，
+    原始输出 `docs/qa/issue-22/logs/variant-matrix.log`）：
+    · 绕开预热、池仍在：3 个进程里 2 个首轮就 SIGSEGV、1 个靠兜底闸跳了 1 帧才活下来；
+    · 保留预热、把池换成空上下文：3/3 进程 × 6 轮全过。
+    → **承重的是主线程预热**；池只是那条线程造 ObjC 对象的常规卫生，不叫第二条防线。
 
     已经加载过时本函数只是一次字典查表 + 模块身份比较；测试用假 CoreMedia 顶掉
     `sys.modules` 时会自动重解析（这条自愈契约有注释钉在 tests/test_sck_real_buffer.py）。
@@ -338,9 +339,9 @@ def extract_audio_samples(sample_buffer: object) -> tuple[np.ndarray, int] | Non
         if rate <= 0 or channels <= 0:
             _reject("BAD_RATE_OR_CHANNELS", f"rate={rate}, channels={channels}")
             return None
-        # 字段为 0 当「不知道」处理（沿用历史行为）；一旦明确报出不是 32 位浮点交错 PCM，
-        # 就必须跳帧——按 float32 硬解析 int16/分离声道数据会得到垃圾音频，那比丢一帧更糟。
-        # 判据按真机实测写（flags=41、bits=32、2560 字节/帧），不误伤真帧。
+        # 字段为 0 当「不知道」处理（沿用历史行为）；一旦明确报出不是 32 位浮点 PCM，
+        # 就必须跳帧——按 float32 硬解析 int16 数据会得到垃圾音频，那比丢一帧更糟。
+        # 判据按真机实测写（flags=41 / bits=32 / 每帧 2560 字节 / 320 帧），不误伤真帧。
         if format_id not in (0, _LPCM_FORMAT_ID):
             _reject("NOT_LPCM", f"formatID={format_id}")
             return None

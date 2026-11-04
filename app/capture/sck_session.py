@@ -77,11 +77,11 @@ def _make_delegate_class() -> Any:
                 return
             # Issue #22：这条回调跑在 ScreenCaptureKit 自己建的 GCD 队列线程上，那条线程
             # 没有 ObjC autorelease pool；解析一帧要经过 PyObjC 造出格式描述等桥对象。
-            # 差分实验（docs/qa/issue-22/README.md）：不改主线程预热、只把这段包进
-            # autorelease pool，压力脚本从 3/3 首轮崩变成 0/28 轮崩。PyObjC 内部到底
-            # 是哪一步坏掉**没有定位**（缺池时 Foundation 的常规表现是泄漏并打
-            # `_NSAutoreleaseNoPool`，而本机 21 份日志里 0 命中），所以这条与
-            # sck.load_coremedia() 的主线程预热是「同一处问题的两条防线」，不是两条结论。
+            # 这条池**不是** Issue #22 的主闸：入库脚本重算过（--no-pool 3/3 进程不崩、
+            # --no-prewarm 3/3 进程崩），主闸是下面 start() 里的主线程预热。留着它的理由
+            # 是常规卫生——这条线程不是 Python 建的、没有 ObjC autorelease pool，而我们
+            # 在池外还会造出格式描述等桥对象。注意它罩不到入参的 ObjC→Python 转换
+            # （那一步在 PyObjC 的 method_stub 里，早于函数体）。
             # 只包音频回调这一条路径；SCK 的完成处理器回调（on_content / on_started /
             # stop）同样在非 Python 线程上收 ObjC 对象，未套池，见 TD-17。
             with objc.autorelease_pool():
