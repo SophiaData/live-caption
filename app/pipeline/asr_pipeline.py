@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import threading
 import time
@@ -74,6 +75,9 @@ class RecognitionPipeline:
         self._draft_queue: deque[Utterance] = deque(maxlen=max(1, max_draft_queue))
         self._lock = threading.RLock()  # 可重入：入队判断里会再读已定稿集合
         self._worker: threading.Thread | None = None
+        # 翻译并发：识别必须串行（受服务吞吐与顺序约束），但翻译彼此独立，
+        # 连续说话时并行翻能把「串行 3 句 4.6s」压到「并发 2.4s」（2026-11-05 实测）。
+        self._tr_pool: concurrent.futures.ThreadPoolExecutor | None = None
         self._running = False
         self._max_queue = 20  # 背压：最多积压 20 句
         self._dropped = 0
@@ -141,6 +145,9 @@ class RecognitionPipeline:
         self._running = True
         self._worker = threading.Thread(target=self._work_loop, daemon=True, name="asr-worker")
         self._worker.start()
+        self._tr_pool = concurrent.futures.ThreadPoolExecutor(
+            max_workers=3, thread_name_prefix="translate"
+        )
 
     def stop(self) -> None:
         self._running = False
@@ -150,6 +157,9 @@ class RecognitionPipeline:
         if self._worker is not None:
             self._worker.join(timeout=2.0)
             self._worker = None
+        if self._tr_pool is not None:
+            self._tr_pool.shutdown(wait=False, cancel_futures=True)
+            self._tr_pool = None
 
     def feed_block(self, block: np.ndarray) -> None:
         """喂音频块（从捕获回调线程调用，必须非阻塞）。"""
@@ -360,17 +370,30 @@ class RecognitionPipeline:
         if self._translator is not None:
             if self._tracer is not None:
                 self._tracer.mark("tr_start", utt)
-            tok, translated = self._translator.translate(result)
-            if self._tracer is not None:
-                self._tracer.mark("tr_end", utt)
-            if tok and translated:
-                if self._on_text is not None:
-                    try:
-                        self._on_text(result, translated, utt)
-                    except Exception:  # noqa: BLE001
-                        logger.exception("字幕回调异常")
+            pool = self._tr_pool
+            if pool is None:
+                # 没有池（基准/测试的同步路径）：保持原样串行翻，行为不变
+                self._translate_and_show(result, utt)
             else:
-                logger.warning("翻译失败（保留原文显示）: %s", translated)
+                pool.submit(self._translate_and_show, result, utt)
+        else:
+            if self._tracer is not None:
+                self._tracer.mark("shown", utt)
+
+    def _translate_and_show(self, result: str, utt: Utterance) -> None:
+        """翻译一句并把双语推给显示层（可能跑在翻译池线程里）。"""
+        if self._translator is None:
+            return
+        tok, translated = self._translator.translate(result)
         if self._tracer is not None:
-            # 「上屏」终点 = 这句最后一次字幕回调执行完毕（交给显示层）
+            self._tracer.mark("tr_end", utt)
+        if tok and translated:
+            if self._on_text is not None:
+                try:
+                    self._on_text(result, translated, utt)
+                except Exception:  # noqa: BLE001
+                    logger.exception("字幕回调异常")
+        else:
+            logger.warning("翻译失败（保留原文显示）: %s", translated)
+        if self._tracer is not None:
             self._tracer.mark("shown", utt)

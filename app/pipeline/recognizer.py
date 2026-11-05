@@ -45,19 +45,28 @@ class Recognizer(ABC):
 class CloudRecognizer(Recognizer):
     """云端识别：OpenAI 兼容 /audio/transcriptions。"""
 
-    def __init__(self, config: ModelConfig) -> None:
+    def __init__(self, config: ModelConfig, language: str | None = None) -> None:
         self._cfg = config
         self._client = OpenAICompatibleClient(config)
+        # 识别语言：None = 让服务自己猜；指定后短句/混语场景准确率高得多。
+        # 以前完全没传这个字段，日语这种短句会被猜错（老板实测反馈）。
+        self._language = language
+
+    def set_language(self, language: str | None) -> None:
+        self._language = language
 
     def transcribe(self, samples: np.ndarray, sample_rate: int = 16000) -> tuple[bool, str]:
         wav_bytes = samples_to_wav_bytes(samples, sample_rate)
         try:
             files = {"file": ("speech.wav", wav_bytes, "audio/wav")}
+            form: dict[str, str] = {"model": self._cfg.model}
+            if self._language:
+                form["language"] = self._language
             resp = self._client._client.post(
                 self._client._url("audio/transcriptions"),
                 headers={"Authorization": f"Bearer {self._cfg.api_key}"},
                 files=files,
-                data={"model": self._cfg.model},
+                data=form,
             )
             if resp.status_code == 200:
                 # 兼容两种返回：{"text": "..."} 或纯文本
@@ -80,9 +89,15 @@ class CloudRecognizer(Recognizer):
 class LocalRecognizer(Recognizer):
     """本地识别：faster-whisper（首次调用时下载/加载模型，之后离线）。"""
 
-    def __init__(self, model_size: str = "small", compute_type: str = "int8") -> None:
+    def __init__(
+        self,
+        model_size: str = "small",
+        compute_type: str = "int8",
+        language: str | None = None,
+    ) -> None:
         self._model_size = model_size
         self._compute_type = compute_type
+        self._language = language  # None = 自动猜；指定 ja/zh/en 后短句准确率更高
         self._model: object | None = None  # 延迟加载
 
     def _ensure_model(self) -> object:
@@ -101,7 +116,7 @@ class LocalRecognizer(Recognizer):
             # faster-whisper 接受 float32 单声道 numpy（16k）
             audio = np.clip(samples.reshape(-1), -1.0, 1.0).astype(np.float32)
             segments, info = model.transcribe(  # type: ignore[attr-defined]
-                audio, language=None, beam_size=1, vad_filter=True
+                audio, language=self._language, beam_size=1, vad_filter=True
             )
             text = "".join(seg.text for seg in segments).strip()
             return True, text

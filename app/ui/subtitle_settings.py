@@ -7,6 +7,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QFormLayout,
     QHBoxLayout,
@@ -32,15 +33,37 @@ class SubtitleSettingsDialog(QDialog):
         parent: QWidget | None = None,
         draft_enabled: bool = True,
         on_draft_change: Callable[[bool], None] | None = None,
+        asr_language: str = "",
+        on_language_change: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("字幕设置")
         self.setModal(True)
-        self.resize(400, 240)
+        self.resize(400, 300)
+        self._on_language_change = on_language_change
         self._subtitle = subtitle
         self._on_draft_change = on_draft_change
 
         layout = QFormLayout(self)
+
+        # 识别语言：不指定时短句容易被猜错（日语实测踩过）
+        self._lang_combo = QComboBox()
+        for label, code in (
+            ("自动检测", ""),
+            ("中文", "zh"),
+            ("英语", "en"),
+            ("日语", "ja"),
+            ("韩语", "ko"),
+            ("西班牙语", "es"),
+            ("法语", "fr"),
+            ("德语", "de"),
+        ):
+            self._lang_combo.addItem(label, code)
+        idx = self._lang_combo.findData(asr_language or "")
+        if idx >= 0:
+            self._lang_combo.setCurrentIndex(idx)
+        self._lang_combo.currentIndexChanged.connect(self._on_lang_changed)
+        layout.addRow("识别语言:", self._lang_combo)
 
         # 字号
         self._font_slider = QSlider(Qt.Orientation.Horizontal)
@@ -82,6 +105,12 @@ class SubtitleSettingsDialog(QDialog):
         self._close_btn = QPushButton("完成")
         self._close_btn.clicked.connect(self.accept)
         layout.addRow(self._close_btn)
+
+    def _on_lang_changed(self, _idx: int) -> None:
+        """语言切换立即生效（下一次识别就用新语言，不用重启）。"""
+        code = self._lang_combo.currentData() or ""
+        if self._on_language_change is not None:
+            self._on_language_change(str(code))
 
     def _on_font(self, value: int) -> None:
         self._font_val.setText(f"{value}px")

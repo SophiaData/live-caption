@@ -52,6 +52,7 @@ LOCAL_ASR_ENTRY = "本地识别（faster-whisper，免注册）"
 PREF_DRAFT_ENABLED = "draft_enabled"
 PREF_DRAFT_SILENCE_MS = "draft_silence_ms"
 PREF_DRAFT_MAX_MS = "draft_max_ms"
+PREF_ASR_LANGUAGE = "asr_language"  # "" = 自动；ja/zh/en/ko 等
 DRAFT_DEFAULT_ENABLED = True
 DRAFT_MIN_SILENCE_MS = 20  # 再短就成了「每块都送识别」，纯烧配额
 
@@ -195,8 +196,10 @@ class CaptureTestWindow(QMainWindow):
             return None, (
                 "还没有配置识别服务。\n请先运行软件配置向导填写识别服务（或用本地识别方案）。"
             )
+        lang = (load_pref(PREF_ASR_LANGUAGE, "") or "").strip()
         return CloudRecognizer(
-            ModelConfig(base_url=cfg.base_url, api_key=cfg.api_key, model=cfg.model)
+            ModelConfig(base_url=cfg.base_url, api_key=cfg.api_key, model=cfg.model),
+            language=lang or None,
         ), ""
 
     def _build_translator(self) -> Translator | None:
@@ -330,6 +333,14 @@ class CaptureTestWindow(QMainWindow):
         if self._pipeline is not None:
             self._pipeline.set_draft_enabled(enabled)
 
+    def _on_language_change(self, code: str) -> None:
+        """识别语言变更：写偏好 + 立即转给正在跑的识别器（不用重启）。"""
+        save_pref(PREF_ASR_LANGUAGE, code)
+        rec = getattr(self._pipeline, "_recognizer", None) if self._pipeline else None
+        setter = getattr(rec, "set_language", None)
+        if setter is not None:
+            setter(code or None)
+
     def open_settings(self) -> None:
         self._ensure_subtitle()
         assert self._subtitle is not None
@@ -338,6 +349,8 @@ class CaptureTestWindow(QMainWindow):
             self,
             draft_enabled=load_bool_pref(PREF_DRAFT_ENABLED, DRAFT_DEFAULT_ENABLED),
             on_draft_change=self._on_draft_change,
+            asr_language=load_pref(PREF_ASR_LANGUAGE, "") or "",
+            on_language_change=self._on_language_change,
         )
         dlg.exec()
         # 保存样式
